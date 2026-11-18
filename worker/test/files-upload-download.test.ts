@@ -2,32 +2,28 @@ import { describe, expect, it } from "vitest"
 import { filesTable, sharesTable, userLimitsTable } from "../src/lib/tables"
 import {
   activePrefix,
+  directUpload,
   initializedContext,
+  postJson,
   request,
   seedSession
 } from "./support/app"
 
 describe("文件上传、流式下载、改期与删除（规格 §5、§10）", () => {
-  it("流式 raw body 上传成功并落元数据与 R2 对象", async () => {
+  it("直传成功并落元数据与 R2 对象", async () => {
     const { env, db, r2 } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
-    const content = "hello streaming raw"
-    const res = await request(
-      env,
-      "/api/files?filename=hello.txt&expiresIn=24h",
-      {
-        method: "POST",
-        headers: {
-          cookie: user.cookie,
-          "content-type": "text/plain"
-        },
-        body: content
-      }
-    )
+    const content = "hello direct upload"
+    const res = await directUpload(env, user.cookie, {
+      filename: "hello.txt",
+      expiresIn: "24h",
+      contentType: "text/plain",
+      content
+    })
 
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
     const file = (await res.json()) as {
       id: string
       name: string
@@ -47,31 +43,24 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     expect(await r2Obj?.text()).toBe(content)
   })
 
-  it("multipart/form-data 表单上传成功（支持双格式通道）", async () => {
+  it("直传支持自定义 Content-Type 与 SHA-256 校验和", async () => {
     const { env, db, r2 } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
     const fileContent = "binary-like-jar-content-for-zeta"
-    const form = new FormData()
-    form.append(
-      "file",
-      new Blob([fileContent], { type: "application/java-archive" }),
-      "spark-app.jar"
-    )
-    form.append("expiresIn", "1h")
-    form.append(
-      "sha256",
+    const sha256 =
       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    )
 
-    const res = await request(env, "/api/files", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: form
+    const res = await directUpload(env, user.cookie, {
+      filename: "spark-app.jar",
+      contentType: "application/java-archive",
+      expiresIn: "1h",
+      sha256,
+      content: fileContent
     })
 
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
     const file = (await res.json()) as {
       id: string
       name: string
@@ -83,9 +72,8 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
 
     expect(file.name).toBe("spark-app.jar")
     expect(file.sizeBytes).toBe(fileContent.length)
-    expect(file.sha256).toBe(
-      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    )
+    expect(file.contentType).toBe("application/java-archive")
+    expect(file.sha256).toBe(sha256)
 
     const r2Obj = await r2.get(`u${user.userId}/${file.id}`)
     expect(r2Obj).not.toBeNull()
@@ -98,18 +86,18 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     const user = await seedSession(db, prefix, { role: "user" })
 
     // 第一次上传
-    const first = await request(env, "/api/files?filename=data.csv", {
-      method: "POST",
-      headers: { cookie: user.cookie, "content-type": "text/csv" },
-      body: "col1,col2"
+    const first = await directUpload(env, user.cookie, {
+      filename: "data.csv",
+      contentType: "text/csv",
+      content: "col1,col2"
     })
-    expect(first.status).toBe(201)
+    expect(first.status).toBe(200)
 
     // 第二次上传同名文件
-    const second = await request(env, "/api/files?filename=DATA.csv", {
-      method: "POST",
-      headers: { cookie: user.cookie, "content-type": "text/csv" },
-      body: "different,content"
+    const second = await directUpload(env, user.cookie, {
+      filename: "DATA.csv",
+      contentType: "text/csv",
+      content: "different,content"
     })
     expect(second.status).toBe(409)
     expect((await second.json()) as { code: string }).toMatchObject({
@@ -117,7 +105,7 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     })
   })
 
-  it("超出生效单文件上限：服务端中止流、删除 R2 已写部分、不落元数据", async () => {
+  it("超出生效单文件上限：服务端拒绝 (413 FILE_TOO_LARGE)、不落元数据、无 R2 孤儿", async () => {
     const { env, db, r2 } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
@@ -132,13 +120,9 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
 
     // 尝试上传 20 字节的数据
     const payload = "12345678901234567890"
-    const res = await request(env, "/api/files?filename=toolarge.bin", {
-      method: "POST",
-      headers: {
-        cookie: user.cookie,
-        "content-type": "application/octet-stream"
-      },
-      body: payload
+    const res = await directUpload(env, user.cookie, {
+      filename: "toolarge.bin",
+      content: payload
     })
 
     expect(res.status).toBe(413)
@@ -159,7 +143,7 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     expect(list.objects.length).toBe(0)
   })
 
-  it("超出用户总容量上限：服务端中止并拒绝 (413 QUOTA_EXCEEDED)", async () => {
+  it("超出用户总容量上限：服务端拒绝 (413 QUOTA_EXCEEDED)", async () => {
     const { env, db, r2 } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
@@ -173,18 +157,16 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
       .run()
 
     // 第一传 10 字节成功
-    const f1 = await request(env, "/api/files?filename=first.bin", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: "1234567890"
+    const f1 = await directUpload(env, user.cookie, {
+      filename: "first.bin",
+      content: "1234567890"
     })
-    expect(f1.status).toBe(201)
+    expect(f1.status).toBe(200)
 
     // 第二传 10 字节超总容量（已用 10 + 需 10 > 15）
-    const f2 = await request(env, "/api/files?filename=second.bin", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: "abcdefghij"
+    const f2 = await directUpload(env, user.cookie, {
+      filename: "second.bin",
+      content: "abcdefghij"
     })
     expect(f2.status).toBe(413)
     const errBody = (await f2.json()) as { code: string; limitBytes: number }
@@ -196,7 +178,7 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     expect(list.objects.length).toBe(1)
   })
 
-  it("无 Content-Length 的 chunked 流式上传超单文件上限：服务端实时中止流、显式回 413 (FILE_TOO_LARGE)、不落元数据、无 R2 孤儿", async () => {
+  it("直传完成时实际对象超出单文件上限：服务端拒绝 (413 FILE_TOO_LARGE)、删除已写对象、清理 pending 记录、无残留", async () => {
     const { env, db, r2 } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
@@ -209,34 +191,44 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
       .bind(user.userId, 104857600, 10, new Date().toISOString())
       .run()
 
-    // 构造无 Content-Length 的 chunked 流（两块各 8 字节，累计 16 > 10）
-    const chunk1 = new TextEncoder().encode("12345678")
-    const chunk2 = new TextEncoder().encode("abcdefgh")
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(chunk1)
-        controller.enqueue(chunk2)
-        controller.close()
-      }
-    })
-
-    const res = await request(env, "/api/files?filename=chunked-toolarge.bin", {
-      method: "POST",
-      headers: {
-        cookie: user.cookie,
-        "content-type": "application/octet-stream"
+    // 声明为 8 字节（通过 init 校验），但实际直传写了 16 字节
+    const initRes = await postJson(
+      env,
+      "/api/files/uploads/init",
+      {
+        filename: "actual-toolarge.bin",
+        declaredSizeBytes: 8
       },
-      body: stream,
-      // @ts-expect-error duplex required for stream body in undici / node fetch
-      duplex: "half"
+      { cookie: user.cookie }
+    )
+    expect(initRes.status).toBe(201)
+    const { uploadId, url } = (await initRes.json()) as {
+      uploadId: string
+      url: string
+    }
+
+    // 模拟写入 16 字节对象
+    await env.S3_FETCH!(url, {
+      method: "PUT",
+      body: new TextEncoder().encode("1234567890123456")
     })
 
-    expect(res.status).toBe(413)
-    const errBody = (await res.json()) as { code: string; limitBytes: number }
+    // Complete 时复核限额拦截
+    const completeRes = await postJson(
+      env,
+      `/api/files/uploads/${uploadId}/complete`,
+      {},
+      { cookie: user.cookie }
+    )
+    expect(completeRes.status).toBe(413)
+    const errBody = (await completeRes.json()) as {
+      code: string
+      limitBytes: number
+    }
     expect(errBody.code).toBe("FILE_TOO_LARGE")
     expect(errBody.limitBytes).toBe(10)
 
-    // 确认元数据未入库（无残留元数据）
+    // 确认元数据已清理
     const rows = await env.DB.prepare(
       `SELECT COUNT(*) as c FROM ${filesTable(prefix)} WHERE user_id = ?`
     )
@@ -244,51 +236,32 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
       .first<{ c: number }>()
     expect(rows?.c).toBe(0)
 
-    // 确认 R2 中无遗留对象（无孤儿）
+    // 确认 R2 对象已被删除
     const list = await r2.list({ prefix: `u${user.userId}/` })
     expect(list.objects.length).toBe(0)
   })
 
-  it("无 Content-Length 的 chunked 流式上传合规：正常上传成功 (201)、R2 与元数据完整", async () => {
+  it("直传声明大小与实际上传一致且合规：正常上传成功 (200)、R2 与元数据完整", async () => {
     const { env, db, r2 } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
-    // 构造合规的无 Content-Length 流
-    const chunk1 = new TextEncoder().encode("chunk-data-1;")
-    const chunk2 = new TextEncoder().encode("chunk-data-2")
     const fullExpected = "chunk-data-1;chunk-data-2"
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(chunk1)
-        controller.enqueue(chunk2)
-        controller.close()
-      }
+    const res = await directUpload(env, user.cookie, {
+      filename: "direct-ok.txt",
+      expiresIn: "1h",
+      contentType: "text/plain",
+      content: fullExpected
     })
 
-    const res = await request(
-      env,
-      "/api/files?filename=chunked-ok.txt&expiresIn=1h",
-      {
-        method: "POST",
-        headers: {
-          cookie: user.cookie,
-          "content-type": "text/plain"
-        },
-        body: stream,
-        // @ts-expect-error duplex required for stream body in undici / node fetch
-        duplex: "half"
-      }
-    )
-
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
     const file = (await res.json()) as {
       id: string
       name: string
       sizeBytes: number
       contentType: string
     }
-    expect(file.name).toBe("chunked-ok.txt")
+    expect(file.name).toBe("direct-ok.txt")
     expect(file.sizeBytes).toBe(fullExpected.length)
 
     // 确认元数据已正确入库
@@ -297,7 +270,7 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     )
       .bind(file.id)
       .first<{ size_bytes: number; name: string }>()
-    expect(meta?.name).toBe("chunked-ok.txt")
+    expect(meta?.name).toBe("direct-ok.txt")
     expect(meta?.size_bytes).toBe(fullExpected.length)
 
     // 确认 R2 对象完整
@@ -312,10 +285,10 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     const user = await seedSession(db, prefix, { role: "user" })
 
     const content = "my-secret-content"
-    const up = await request(env, "/api/files?filename=doc%201.pdf", {
-      method: "POST",
-      headers: { cookie: user.cookie, "content-type": "application/pdf" },
-      body: content
+    const up = await directUpload(env, user.cookie, {
+      filename: "doc 1.pdf",
+      contentType: "application/pdf",
+      content
     })
     const uploaded = (await up.json()) as { id: string }
 
@@ -335,10 +308,9 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
-    const up = await request(env, "/api/files?filename=temp.txt", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: "temp"
+    const up = await directUpload(env, user.cookie, {
+      filename: "temp.txt",
+      content: "temp"
     })
     const uploaded = (await up.json()) as { id: string }
 
@@ -360,10 +332,9 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
-    const up = await request(env, "/api/files?filename=temp2.txt", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: "temp2"
+    const up = await directUpload(env, user.cookie, {
+      filename: "temp2.txt",
+      content: "temp2"
     })
     const uploaded = (await up.json()) as { id: string }
 
@@ -406,10 +377,9 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
-    const up = await request(env, "/api/files?filename=todelete.txt", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: "to-delete"
+    const up = await directUpload(env, user.cookie, {
+      filename: "todelete.txt",
+      content: "to-delete"
     })
     const uploaded = (await up.json()) as { id: string }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { filesTable, sharesTable } from "../src/lib/tables"
 import {
   activePrefix,
+  directUpload,
   initializedContext,
   request,
   seedSession
@@ -14,13 +15,10 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
     const user = await seedSession(db, prefix, { role: "user" })
 
     // 上传一个文件
-    const up = await request(env, "/api/files?filename=app.jar", {
-      method: "POST",
-      headers: {
-        cookie: user.cookie,
-        "content-type": "application/java-archive"
-      },
-      body: "jar-binary-bytes"
+    const up = await directUpload(env, user.cookie, {
+      filename: "app.jar",
+      contentType: "application/java-archive",
+      content: "jar-binary-bytes"
     })
     const file = (await up.json()) as { id: string }
 
@@ -59,15 +57,11 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
     const user = await seedSession(db, prefix, { role: "user" })
 
     // 上传一个 1 小时过期的文件
-    const up = await request(
-      env,
-      "/api/files?filename=file1h.txt&expiresIn=1h",
-      {
-        method: "POST",
-        headers: { cookie: user.cookie },
-        body: "content-1h"
-      }
-    )
+    const up = await directUpload(env, user.cookie, {
+      filename: "file1h.txt",
+      expiresIn: "1h",
+      content: "content-1h"
+    })
     const file = (await up.json()) as { id: string; expiresAt: string }
 
     // 申请创建 7 天有效期的分享
@@ -89,13 +83,10 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
     const user = await seedSession(db, prefix, { role: "user" })
 
     const content = "public-zeta-jar-stream-content"
-    const up = await request(env, "/api/files?filename=zeta.jar", {
-      method: "POST",
-      headers: {
-        cookie: user.cookie,
-        "content-type": "application/java-archive"
-      },
-      body: content
+    const up = await directUpload(env, user.cookie, {
+      filename: "zeta.jar",
+      contentType: "application/java-archive",
+      content
     })
     const file = (await up.json()) as { id: string }
 
@@ -144,10 +135,9 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
 
-    const up = await request(env, "/api/files?filename=check404.bin", {
-      method: "POST",
-      headers: { cookie: user.cookie },
-      body: "check"
+    const up = await directUpload(env, user.cookie, {
+      filename: "check404.bin",
+      content: "check"
     })
     const file = (await up.json()) as { id: string }
 

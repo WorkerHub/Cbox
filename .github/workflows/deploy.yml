@@ -50,6 +50,8 @@ jobs:
           D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID }}
           D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
           TABLE_PREFIX: ${{ vars.TABLE_PREFIX }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: node scripts/materialize-secrets.mjs
 
       # 前端构建产物与 Worker 同一部署单元（wrangler.toml 的 [assets] 指向 ../web/dist）。

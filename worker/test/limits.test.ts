@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   DEFAULT_FILE_QUOTA_BYTES,
   DEFAULT_FILE_SINGLE_MAX_BYTES,
-  PLATFORM_HARD_CAP_BYTES,
   getUserUsageBytes,
   resolveUserLimits,
   validateUploadLimits
@@ -51,7 +50,7 @@ describe("限额分层与用量（规格 §4）", () => {
     expect(limits.effectiveSingleMaxBytes).toBe(20 * 1024 * 1024)
   })
 
-  it("单人配置高于平台硬顶（约 100 MiB）时与硬顶取小", async () => {
+  it("单人配置单文件上限（如 500 MiB）时按配置生效（已解除 100 MiB 平台硬顶钳制）", async () => {
     const { env, db } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
@@ -71,8 +70,8 @@ describe("限额分层与用量（规格 §4）", () => {
 
     const limits = await resolveUserLimits(env.DB, prefix, user.userId)
     expect(limits.userSingleMaxBytes).toBe(500 * 1024 * 1024)
-    // 实际执行上限与平台硬顶取小
-    expect(limits.effectiveSingleMaxBytes).toBe(PLATFORM_HARD_CAP_BYTES)
+    // 实际执行上限不再受 100 MiB 平台硬顶钳制
+    expect(limits.effectiveSingleMaxBytes).toBe(500 * 1024 * 1024)
     expect(limits.effectiveQuotaBytes).toBe(1000 * 1024 * 1024)
   })
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { insertFileRecord } from "../src/db/queries/files"
+import { insertPendingFileRecord } from "../src/db/queries/uploads"
 import { createShareRecord } from "../src/db/queries/shares"
 import { executeCleanupJob } from "../src/services/scheduled-task"
 import { filesTable, sharesTable } from "../src/lib/tables"
@@ -151,6 +152,78 @@ describe("定时清理与 R2 孤儿对账（规格 §9、§10）", () => {
     expect(await r2.get(orphanOldKey)).toBeNull()
     expect(await r2.get(orphanYoungKey)).not.toBeNull()
     expect(await r2.get(validKey)).not.toBeNull()
+  })
+
+  it("清理超期 24 小时的 pending 孤儿直传任务并释放预占容量，保留小于 24 小时的活跃直传", async () => {
+    const { env, db, r2 } = await initializedContext()
+    const prefix = activePrefix(env)
+    const user = await seedSession(db, prefix, { role: "user" })
+
+    const testNow = new Date("2026-06-10T12:00:00.000Z")
+    const testNowSec = Math.floor(testNow.getTime() / 1000)
+
+    // 1. 超期 25 小时的 pending 任务 (带 R2 临时对象与 upload_id)
+    const oldKey = `u${user.userId}/upload-old`
+    r2.seedObject(
+      oldKey,
+      "temp-data-old",
+      new Date(testNow.getTime() - 25 * 3600 * 1000)
+    )
+    await insertPendingFileRecord(env.DB, prefix, {
+      id: "upload-old",
+      userId: user.userId,
+      folderId: null,
+      name: "old-upload.bin",
+      sizeBytes: 1000,
+      contentType: "application/octet-stream",
+      sha256: null,
+      r2Key: oldKey,
+      uploadId: "mock-upload-old",
+      expiresAt: null
+    })
+    // 覆盖 created_at 为 25 小时前
+    await env.DB.prepare(
+      `UPDATE ${filesTable(prefix)} SET created_at = ? WHERE id = 'upload-old'`
+    )
+      .bind(new Date(testNow.getTime() - 25 * 3600 * 1000).toISOString())
+      .run()
+
+    // 2. 仅 1 小时的 pending 任务（正处于正常上传中）
+    const youngKey = `u${user.userId}/upload-young`
+    r2.seedObject(
+      youngKey,
+      "temp-data-young",
+      new Date(testNow.getTime() - 1 * 3600 * 1000)
+    )
+    await insertPendingFileRecord(env.DB, prefix, {
+      id: "upload-young",
+      userId: user.userId,
+      folderId: null,
+      name: "young-upload.bin",
+      sizeBytes: 2000,
+      contentType: "application/octet-stream",
+      sha256: null,
+      r2Key: youngKey,
+      uploadId: "mock-upload-young",
+      expiresAt: null
+    })
+
+    const outcome = await executeCleanupJob(env, { now: testNowSec })
+    expect(outcome.abortedUploads).toBe(1)
+
+    // 超期 pending 已被清理
+    expect(await r2.get(oldKey)).toBeNull()
+    const oldRow = await env.DB.prepare(
+      `SELECT 1 FROM ${filesTable(prefix)} WHERE id = 'upload-old'`
+    ).first()
+    expect(oldRow).toBeNull()
+
+    // 正常 pending 保留
+    expect(await r2.get(youngKey)).not.toBeNull()
+    const youngRow = await env.DB.prepare(
+      `SELECT 1 FROM ${filesTable(prefix)} WHERE id = 'upload-young'`
+    ).first()
+    expect(youngRow).not.toBeNull()
   })
 
   it("POST /api/admin/cleanup：管理员手动触发对账清理", async () => {

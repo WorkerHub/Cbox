@@ -5,6 +5,7 @@ import { filesTable, sharesTable } from "../src/lib/tables"
 import {
   activePrefix,
   adminCookie,
+  directUpload,
   initializedContext,
   makeContext,
   registerUser,
@@ -67,34 +68,24 @@ describe("规格 §11 验收标准全量专项测试", () => {
     expect(dupFolderRes.status).toBe(409)
 
     // 3. 向文件夹内上传文件
-    const uploadRes = await request(
-      env,
-      `/api/files?folderId=${folder.id}&filename=app.jar&expiresIn=24h`,
-      {
-        method: "POST",
-        headers: {
-          cookie: user.cookie,
-          "content-type": "application/java-archive"
-        },
-        body: "jar-binary-payload"
-      }
-    )
-    expect(uploadRes.status).toBe(201)
+    const uploadRes = await directUpload(env, user.cookie, {
+      folderId: folder.id,
+      filename: "app.jar",
+      expiresIn: "24h",
+      contentType: "application/java-archive",
+      content: "jar-binary-payload"
+    })
+    expect(uploadRes.status).toBe(200)
     const file = (await uploadRes.json()) as { id: string; name: string }
 
     // 4. 同夹重名文件上传拦截
-    const dupFileRes = await request(
-      env,
-      `/api/files?folderId=${folder.id}&filename=app.jar&expiresIn=24h`,
-      {
-        method: "POST",
-        headers: {
-          cookie: user.cookie,
-          "content-type": "application/java-archive"
-        },
-        body: "jar-binary-payload-2"
-      }
-    )
+    const dupFileRes = await directUpload(env, user.cookie, {
+      folderId: folder.id,
+      filename: "app.jar",
+      expiresIn: "24h",
+      contentType: "application/java-archive",
+      content: "jar-binary-payload-2"
+    })
     expect(dupFileRes.status).toBe(409)
 
     // 5. 检查文件夹列表与面包屑
@@ -152,16 +143,11 @@ describe("规格 §11 验收标准全量专项测试", () => {
       role: "user"
     })
 
-    // 1. 全局默认：单文件超 100 MiB（101 MiB）拒绝
-    const bigContent = new Uint8Array(101 * 1024 * 1024)
-    const rTooLarge = await request(env, "/api/files?filename=too-big.dat", {
-      method: "POST",
-      headers: {
-        cookie: u1.cookie,
-        "content-type": "application/octet-stream",
-        "content-length": String(bigContent.length)
-      },
-      body: bigContent
+    // 1. 全局默认：单文件超 2 GiB 拒绝 (例如 2049 MiB)
+    const rTooLarge = await directUpload(env, u1.cookie, {
+      filename: "too-big.dat",
+      declaredSizeBytes: 2 * 1024 * 1024 * 1024 + 1024,
+      skipPut: true
     })
     expect(rTooLarge.status).toBe(413)
 
@@ -176,15 +162,10 @@ describe("规格 §11 验收标准全量专项测试", () => {
     expect(putGlobalRes.status).toBe(200)
 
     // 11 MB 文件上传被拒
-    const content11MB = new Uint8Array(11 * 1024 * 1024)
-    const r11u1 = await request(env, "/api/files?filename=11mb.dat", {
-      method: "POST",
-      headers: {
-        cookie: u1.cookie,
-        "content-type": "application/octet-stream",
-        "content-length": String(content11MB.length)
-      },
-      body: content11MB
+    const r11u1 = await directUpload(env, u1.cookie, {
+      filename: "11mb.dat",
+      declaredSizeBytes: 11 * 1024 * 1024,
+      skipPut: true
     })
     expect(r11u1.status).toBe(413)
 
@@ -201,26 +182,17 @@ describe("规格 §11 验收标准全量专项测试", () => {
     expect(setOverrideRes.status).toBe(200)
 
     // u1 可以上传 11 MB 文件
-    const r11u1Ok = await request(env, "/api/files?filename=11mb-u1.dat", {
-      method: "POST",
-      headers: {
-        cookie: u1.cookie,
-        "content-type": "application/octet-stream",
-        "content-length": String(content11MB.length)
-      },
-      body: content11MB
+    const r11u1Ok = await directUpload(env, u1.cookie, {
+      filename: "11mb-u1.dat",
+      content: new Uint8Array(11 * 1024 * 1024)
     })
-    expect(r11u1Ok.status).toBe(201)
+    expect(r11u1Ok.status).toBe(200)
 
     // u2 依然被拒
-    const r11u2 = await request(env, "/api/files?filename=11mb-u2.dat", {
-      method: "POST",
-      headers: {
-        cookie: u2.cookie,
-        "content-type": "application/octet-stream",
-        "content-length": String(content11MB.length)
-      },
-      body: content11MB
+    const r11u2 = await directUpload(env, u2.cookie, {
+      filename: "11mb-u2.dat",
+      declaredSizeBytes: 11 * 1024 * 1024,
+      skipPut: true
     })
     expect(r11u2.status).toBe(413)
 
@@ -255,16 +227,13 @@ describe("规格 §11 验收标准全量专项测试", () => {
     const user = await seedSession(db, prefix, { role: "user" })
 
     // 1. 上传 1 小时过期的文件
-    const upRes = await request(
-      env,
-      "/api/files?filename=temp.txt&expiresIn=1h",
-      {
-        method: "POST",
-        headers: { cookie: user.cookie, "content-type": "text/plain" },
-        body: "short-lived-file"
-      }
-    )
-    expect(upRes.status).toBe(201)
+    const upRes = await directUpload(env, user.cookie, {
+      filename: "temp.txt",
+      expiresIn: "1h",
+      contentType: "text/plain",
+      content: "short-lived-file"
+    })
+    expect(upRes.status).toBe(200)
     const file = (await upRes.json()) as { id: string }
 
     // 建一条分享
@@ -303,29 +272,23 @@ describe("规格 §11 验收标准全量专项测试", () => {
     expect(dbFile).toBeNull()
 
     // 4. 永不过期文件不受清理影响
-    const upNever = await request(
-      env,
-      "/api/files?filename=never.txt&expiresIn=never",
-      {
-        method: "POST",
-        headers: { cookie: user.cookie, "content-type": "text/plain" },
-        body: "permanent-file"
-      }
-    )
+    const upNever = await directUpload(env, user.cookie, {
+      filename: "never.txt",
+      expiresIn: "never",
+      contentType: "text/plain",
+      content: "permanent-file"
+    })
     const neverFile = (await upNever.json()) as { id: string }
     await executeCleanupJob(env)
     expect(await r2.get(`u${user.userId}/${neverFile.id}`)).not.toBeNull()
 
     // 5. 改期：将 1h 文件改为永不过期后不被清理
-    const upToChange = await request(
-      env,
-      "/api/files?filename=change.txt&expiresIn=1h",
-      {
-        method: "POST",
-        headers: { cookie: user.cookie, "content-type": "text/plain" },
-        body: "change-file"
-      }
-    )
+    const upToChange = await directUpload(env, user.cookie, {
+      filename: "change.txt",
+      expiresIn: "1h",
+      contentType: "text/plain",
+      content: "change-file"
+    })
     const changeFile = (await upToChange.json()) as { id: string }
 
     const patchRes = await request(env, `/api/files/${changeFile.id}`, {
@@ -348,19 +311,14 @@ describe("规格 §11 验收标准全量专项测试", () => {
     const jarContent = "PK\x03\x04zeta-spark-job-binary-code-12345"
     const expectedSha256 = await sha256Hex(jarContent)
 
-    const upRes = await request(
-      env,
-      `/api/files?filename=spark-job.jar&expiresIn=24h&sha256=${expectedSha256}`,
-      {
-        method: "POST",
-        headers: {
-          cookie: user.cookie,
-          "content-type": "application/java-archive"
-        },
-        body: jarContent
-      }
-    )
-    expect(upRes.status).toBe(201)
+    const upRes = await directUpload(env, user.cookie, {
+      filename: "spark-job.jar",
+      expiresIn: "24h",
+      contentType: "application/java-archive",
+      sha256: expectedSha256,
+      content: jarContent
+    })
+    expect(upRes.status).toBe(200)
     const file = (await upRes.json()) as { id: string; sha256: string }
     expect(file.sha256).toBe(expectedSha256)
 

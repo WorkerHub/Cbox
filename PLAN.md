@@ -1,10 +1,11 @@
-# Cbox 后端：S3 直传改造 —— 实施计划
+# 服务端：S3 直传改造 —— 实施计划
 
 ## 一、两个「二选一」定稿
 
 ### 决策 1：SigV4 实现方式 = `aws4fetch`（不自实现）
 
 **理由**（舰队纪律 §3「依赖优先，不手搓等价组件」）：
+
 - `aws4fetch@1.0.20`（MIT）原生支持我们需要的全部能力，已实测验证：
   - `client.sign(url, { method, headers, aws: { signQuery: true, allHeaders: true } })` 产出预签名 URL；设置 `allHeaders: true` 会把 `content-length` / `content-type` 纳入签名（默认在 `UNSIGNABLE_HEADERS` 里被跳过）——这正是 single PUT「签名绑定 Content-Length」所需。
   - 分片预签名：URL 上携带 `partNumber` + `uploadId` 查询参数即可正确签名。
@@ -14,6 +15,7 @@
 ### 决策 2：pending 状态落法 = `files` 表加 `status` 列（附 `upload_id` 列）
 
 **理由**（规格倾向 status 列）：
+
 - 独立 `uploads` 表会冗余复制文件名、文件夹、过期时间等元数据，且在 complete 时需要做跨表迁移事务；在 `files` 表加 `status` 列让 pending 记录复用同一张表，complete 时只需一次原子更新（`UPDATE status='active', size_bytes=?, sha256=?, upload_id=NULL`）。
 - multipart 上传需要在 init 时记录 S3 返回的 `uploadId`，供后续分片签名、完成和中止使用，因此除 `status` 外同步增加一个可空列 `upload_id TEXT`。
 
@@ -26,13 +28,17 @@
 现状：`getMigrations()`（`worker/src/lib/migrations.ts`）当前已坍缩为单一基线 `schema_v1`，执行器按账本幂等执行；生产库账本中已存在 `schema_v1`，执行器会判定为 skipped。
 
 改动方案：
+
 1. **基线更新**（`worker/src/lib/schema.ts`）：在 `files` 表 DDL 中增加两列：
+
    ```sql
    status    TEXT NOT NULL DEFAULT 'active',
    upload_id TEXT
    ```
+
    紧随 `r2_key` 列之后。新安装环境直接由基线建出包含这两列的终态表结构。
 2. **增量迁移注册**（`worker/src/lib/migrations.ts`）：新增第二个迁移 `files_uploads_v1`，使用 `prepare` 钩子实现**幂等 ALTER**（针对存量数据库升级），`sql` 留空：
+
    ```ts
    {
      name: "files_uploads_v1",
@@ -50,7 +56,8 @@
      }
    }
    ```
-   *说明*：SQLite 的 `ALTER TABLE ADD COLUMN` 不具备幂等性，而执行器在失败重试时会重新执行同一迁移；使用 `PRAGMA table_info` 先检查列是否存在可保证绝对幂等，与 `migrations-runner.ts` 中已有的 `hasLedgerShape` 模式一致。
+
+   _说明_：SQLite 的 `ALTER TABLE ADD COLUMN` 不具备幂等性，而执行器在失败重试时会重新执行同一迁移；使用 `PRAGMA table_info` 先检查列是否存在可保证绝对幂等，与 `migrations-runner.ts` 中已有的 `hasLedgerShape` 模式一致。
 3. **静态 SQL 同步**（`worker/src/db/schema.sql`）：通过运行 `pnpm --filter ./worker schema:sql` 重新生成，确保通过 `worker/test/schema-sql.test.ts` 的一致性断言。
 4. **账本测试适配**（`worker/test/migrations-ledger.test.ts`）：更新断言以允许包含空 `sql` 的 prepare-only 增量迁移，并增加存量库升级（加列且保持默认 active）的验证用例。
 
@@ -76,7 +83,7 @@
 
 - **`worker/src/lib/s3.ts`**（新建）：
   - 引入 `aws4fetch` 的 `AwsClient`。
-  - S3 端点推导：`https://${env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`，目标桶为 `cbox-files`。
+  - S3 端点推导：`https://${env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`，目标桶为专属 R2 桶。
   - 凭据装载：从 `env.R2_ACCESS_KEY_ID` 与 `env.R2_SECRET_ACCESS_KEY` 加载；若缺失则在相关操作时抛出明确的配置错误。
   - 封装核心方法：
     - `presignPut(key, contentLength, contentType, expiresIn = 900)`：生成单个 PUT 预签名 URL。必须配置 `aws: { signQuery: true, allHeaders: true }`，强制将 `content-length` 与 `content-type` 写入 `X-Amz-SignedHeaders`。
@@ -154,20 +161,25 @@
 
 - **`worker/src/types.ts`**：
   - `Env` 接口新增可选凭据字段：
+
     ```ts
     R2_ACCESS_KEY_ID?: string
     R2_SECRET_ACCESS_KEY?: string
     CLOUDFLARE_ACCOUNT_ID?: string
     ```
+
 - **`worker/.dev.vars.example`**：
   - 增补本地开发环境变量示例：
+
     ```env
     R2_ACCESS_KEY_ID=
     R2_SECRET_ACCESS_KEY=
     CLOUDFLARE_ACCOUNT_ID=
     ```
+
 - **`scripts/materialize-secrets.mjs`**：
   - `REQUIRED` 数组增加：
+
     ```js
     ["R2_ACCESS_KEY_ID", "organization secret"],
     ["R2_SECRET_ACCESS_KEY", "organization secret"],
@@ -175,10 +187,12 @@
   - `SECRET_KEYS` 数组增加 `R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`CLOUDFLARE_ACCOUNT_ID`（后者用于注入 Worker 运行时推导 S3 端点）。
 - **`.github/workflows/deploy.yml`**：
   - 在 `materialize-secrets` 步骤中补充对应的环境变量传递：
+
     ```yaml
     R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
     R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
     ```
+
 - **`README.md`**：
   - 更新「部署 -> 凭证清单」表格，加入 `R2_ACCESS_KEY_ID` 与 `R2_SECRET_ACCESS_KEY`（标注为组织级 Secret 必填），并注明 `CLOUDFLARE_ACCOUNT_ID` 将同步注入 Worker 以供端点解析。
 
@@ -187,6 +201,7 @@
 ## 四、测试影响与用例规划
 
 ### 1. 新增测试套件
+
 - **`worker/test/s3-client.test.ts`**：
   - 覆盖 S3 端点构造（基于 Account ID）。
   - 覆盖预签名 URL 生成与参数校验（`X-Amz-Signature`、`X-Amz-Expires=900`、`X-Amz-Algorithm=AWS4-HMAC-SHA256`）。
@@ -200,6 +215,7 @@
   - 测试隔离性：pending 状态文件绝对不出现在文件列表、文件夹汇总或分享链接中。
 
 ### 2. 现有测试套件更新
+
 - **`worker/test/limits.test.ts`**：
   - 移除原 100 MiB 硬顶截断用例，改为断言大限额正常生效；默认值断言同步更新为 2 GiB 与 10 GiB。
 - **`worker/test/admin-limits.test.ts`**：
@@ -247,7 +263,7 @@
 ## 六、前置依赖与协作边界
 
 1. **R2 S3 凭据**：
-   - 需要在 Cloudflare 平台生成作用域限制为 `cbox-files` 桶读写权限的 S3 访问密钥（`R2_ACCESS_KEY_ID` 与 `R2_SECRET_ACCESS_KEY`）。
+   - 需要在 Cloudflare 平台生成作用域限制为专属 R2 桶读写权限的 S3 访问密钥（`R2_ACCESS_KEY_ID` 与 `R2_SECRET_ACCESS_KEY`）。
    - 本地开发与 CI 自动化测试均采用 Mock S3 机制或桩注入，不依赖真实凭据，不会阻塞代码编写与测试验证。
 2. **跨任务协作（前端 #15）**：
    - 前端任务 #15 负责直传上传组件（upload-dialog）及去除管理页面 100 MiB 提示。

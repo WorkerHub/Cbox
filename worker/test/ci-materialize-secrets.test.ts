@@ -41,7 +41,9 @@ const VALID_ENV = {
   CLOUDFLARE_API_TOKEN: "cf-api-token-unit-test",
   CLOUDFLARE_ACCOUNT_ID: "acct-unit-test",
   D1_DATABASE_ID: "dbid-unit-test",
-  D1_DATABASE_NAME: "workerhub-app"
+  D1_DATABASE_NAME: "workerhub-app",
+  R2_ACCESS_KEY_ID: "r2-access-key-unit-test",
+  R2_SECRET_ACCESS_KEY: "r2-secret-key-unit-test"
 }
 
 /**
@@ -125,7 +127,10 @@ describe("materialize-secrets：三态注入与落盘", () => {
     expect(statSync(res.secretsPath).mode & 0o777).toBe(0o600)
     expect(secretKeys(res.secretsPath)).toEqual([
       "SETUP_SECRET",
-      "SIGNING_SECRET"
+      "SIGNING_SECRET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CLOUDFLARE_ACCOUNT_ID"
     ])
     // 占位符全部被替换，且不再有残留
     expect(res.toml).not.toContain("_PLACEHOLDER")
@@ -190,7 +195,9 @@ describe("materialize-secrets：三态注入与落盘", () => {
     const output = res.stdout + res.stderr
 
     expect(res.status).toBe(0)
-    expect(output).toContain("SETUP_SECRET, SIGNING_SECRET")
+    expect(output).toContain(
+      "SETUP_SECRET, SIGNING_SECRET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, CLOUDFLARE_ACCOUNT_ID"
+    )
     expect(output).toContain('TABLE_PREFIX="wiki"')
     for (const value of [
       VALID_ENV.SETUP_SECRET,
@@ -198,7 +205,9 @@ describe("materialize-secrets：三态注入与落盘", () => {
       VALID_ENV.CLOUDFLARE_API_TOKEN,
       VALID_ENV.CLOUDFLARE_ACCOUNT_ID,
       VALID_ENV.D1_DATABASE_ID,
-      VALID_ENV.D1_DATABASE_NAME
+      VALID_ENV.D1_DATABASE_NAME,
+      VALID_ENV.R2_ACCESS_KEY_ID,
+      VALID_ENV.R2_SECRET_ACCESS_KEY
     ]) {
       expect(output).not.toContain(value)
     }
@@ -231,7 +240,9 @@ describe("materialize-secrets：不合格配置一律中止且不留半成品", 
       ["CLOUDFLARE_API_TOKEN", "organization secret"],
       ["CLOUDFLARE_ACCOUNT_ID", "organization secret"],
       ["D1_DATABASE_ID", "organization secret"],
-      ["D1_DATABASE_NAME", "organization variable"]
+      ["D1_DATABASE_NAME", "organization variable"],
+      ["R2_ACCESS_KEY_ID", "organization secret"],
+      ["R2_SECRET_ACCESS_KEY", "organization secret"]
     ] as const) {
       const res = runScript(makeSandbox(), { ...VALID_ENV, [key]: undefined })
 
@@ -292,7 +303,10 @@ describe("materialize-secrets：可选的 WAKER_SIGNING_KEY", () => {
     expect(res.status).toBe(0)
     expect(secretKeys(res.secretsPath)).toEqual([
       "SETUP_SECRET",
-      "SIGNING_SECRET"
+      "SIGNING_SECRET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CLOUDFLARE_ACCOUNT_ID"
     ])
     expect(res.stdout).toContain("WAKER_SIGNING_KEY: 未配置")
   })
@@ -312,6 +326,9 @@ describe("materialize-secrets：可选的 WAKER_SIGNING_KEY", () => {
     expect(secretKeys(res.secretsPath)).toEqual([
       "SETUP_SECRET",
       "SIGNING_SECRET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "CLOUDFLARE_ACCOUNT_ID",
       "WAKER_SIGNING_KEY"
     ])
     expect(res.stdout).toContain("WAKER_SIGNING_KEY: 已配置")

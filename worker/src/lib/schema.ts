@@ -133,6 +133,8 @@ export const SCHEMA_TABLES: SchemaTable[] = [
   content_type TEXT NOT NULL,
   sha256       TEXT,
   r2_key       TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'active',
+  upload_id    TEXT,
   expires_at   TEXT,
   created_at   TEXT NOT NULL
 )`

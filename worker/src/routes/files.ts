@@ -1,6 +1,5 @@
 import { Hono } from "hono"
 import {
-  type LimitValidationResult,
   getUserUsageBytes,
   resolveUserLimits,
   validateUploadLimits
@@ -10,13 +9,29 @@ import {
   checkFileNameConflict,
   deleteFileRecord,
   findFileById,
-  insertFileRecord,
   isFileExpired,
   isValidExpiresInPreset,
+  toFileView,
   updateFileExpiration
 } from "../db/queries/files"
 import { findFolderById } from "../db/queries/folders"
 import { createShareRecord, listSharesByFile } from "../db/queries/shares"
+import {
+  completeFileUpload,
+  deletePendingUpload,
+  findPendingUploadById,
+  insertPendingFileRecord
+} from "../db/queries/uploads"
+import {
+  abortMultipartUpload,
+  assertS3Configured,
+  completeMultipartUpload,
+  getPresignedPartPutUrl,
+  getPresignedPutUrl,
+  initiateMultipartUpload,
+  isS3Configured,
+  type CompletedPart
+} from "../lib/s3"
 import { currentUserId } from "../lib/account"
 import { apiError, readJsonBody } from "../lib/http"
 import { getTablePrefix } from "../lib/table-prefix"
@@ -24,112 +39,98 @@ import type { HonoEnv } from "../types"
 
 export const fileRoutes = new Hono<HonoEnv>()
 
+const MULTIPART_THRESHOLD_BYTES = 100 * 1024 * 1024 // 100 MiB
+const MULTIPART_PART_SIZE_BYTES = 10 * 1024 * 1024 // 10 MiB
+
+function guessContentType(
+  filename: string,
+  fallback = "application/octet-stream"
+): string {
+  const ext = filename.split(".").pop()?.toLowerCase()
+  const mimeMap: Record<string, string> = {
+    txt: "text/plain",
+    html: "text/html",
+    css: "text/css",
+    js: "application/javascript",
+    json: "application/json",
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    pdf: "application/pdf",
+    zip: "application/zip",
+    tar: "application/x-tar",
+    gz: "application/gzip",
+    mp4: "video/mp4",
+    mp3: "audio/mpeg"
+  }
+  return (ext && mimeMap[ext]) || fallback
+}
+
 /**
- * 文件上传（规格 §5.2、§10）：
- * - 支持流式 body（raw stream）或 multipart/form-data（双支持）；
- * - 服务端边读边计数，超任一限额即中止并删除已写对象、不落元数据；
- * - 校验顺序：①单文件上限 ②用户总容量；
- * - 成功才落元数据。
+ * POST /api/files/uploads/init
+ * 发起直传任务：校验限额与重名，预占配额，生成 S3 预签名直传凭证（single）或初始化分片（multipart）。
  */
-fileRoutes.post("/", async (c) => {
+fileRoutes.post("/uploads/init", async (c) => {
   const userId = currentUserId(c)
   const prefix = getTablePrefix(c.env)
-  const contentTypeHeader = c.req.header("content-type") || ""
 
-  let folderId: string | null = null
-  let expiresIn: string | null = null
-  let clientSha256: string | null = null
-  let fileName = "unnamed"
-  let fileContentType = "application/octet-stream"
-  let inputStream: ReadableStream<Uint8Array> | null = null
-  let announcedSize: number | null = null
+  const body = await readJsonBody<{
+    filename?: unknown
+    declaredSizeBytes?: unknown
+    folderId?: unknown
+    expiresIn?: unknown
+    contentType?: unknown
+  }>(c)
 
-  if (contentTypeHeader.includes("multipart/form-data")) {
-    const formData = await c.req.formData().catch(() => null)
-    if (!formData) {
-      return apiError(c, 400, "INVALID_FORM_DATA", "Invalid form data")
-    }
-
-    const fileField = formData.get("file")
-    if (!fileField || !(fileField instanceof File)) {
-      return apiError(c, 400, "MISSING_FILE", "File is required")
-    }
-
-    fileName = fileField.name || "unnamed"
-    fileContentType = fileField.type || "application/octet-stream"
-    announcedSize = fileField.size
-    inputStream = fileField.stream() as unknown as ReadableStream<Uint8Array>
-
-    const rawFolderId = formData.get("folderId")
-    if (typeof rawFolderId === "string" && rawFolderId.trim() !== "") {
-      folderId = rawFolderId.trim()
-    }
-
-    const rawExpiresIn = formData.get("expiresIn")
-    if (typeof rawExpiresIn === "string" && rawExpiresIn.trim() !== "") {
-      expiresIn = rawExpiresIn.trim()
-    }
-
-    const rawSha256 = formData.get("sha256")
-    if (typeof rawSha256 === "string" && rawSha256.trim() !== "") {
-      clientSha256 = rawSha256.trim()
-    }
-  } else {
-    // 流式 raw body
-    inputStream = c.req.raw.body
-    if (!inputStream) {
-      return apiError(c, 400, "EMPTY_BODY", "Request body is empty")
-    }
-
-    const rawFolderId =
-      c.req.query("folderId") || c.req.header("x-folder-id") || null
-    if (rawFolderId && rawFolderId.trim() !== "") {
-      folderId = rawFolderId.trim()
-    }
-
-    const rawExpiresIn =
-      c.req.query("expiresIn") || c.req.header("x-expires-in") || null
-    if (rawExpiresIn && rawExpiresIn.trim() !== "") {
-      expiresIn = rawExpiresIn.trim()
-    }
-
-    const rawSha256 = c.req.query("sha256") || c.req.header("x-sha256") || null
-    if (rawSha256 && rawSha256.trim() !== "") {
-      clientSha256 = rawSha256.trim()
-    }
-
-    const rawFilename =
-      c.req.query("filename") || c.req.header("x-filename") || null
-    if (rawFilename && rawFilename.trim() !== "") {
-      try {
-        fileName = decodeURIComponent(rawFilename.trim())
-      } catch {
-        fileName = rawFilename.trim()
-      }
-    }
-
-    fileContentType = contentTypeHeader || "application/octet-stream"
-
-    const clHeader = c.req.header("content-length")
-    if (clHeader) {
-      const parsedCl = Number(clHeader)
-      if (Number.isInteger(parsedCl) && parsedCl >= 0) {
-        announcedSize = parsedCl
-      }
-    }
+  if (!body) {
+    return apiError(c, 400, "INVALID_REQUEST", "Invalid request body")
   }
 
-  // 1. 文件夹有效性检查
-  if (folderId !== null) {
+  const filename = typeof body.filename === "string" ? body.filename.trim() : ""
+  if (!filename) {
+    return apiError(c, 400, "INVALID_FILENAME", "Filename is required")
+  }
+
+  const declaredSizeBytes =
+    typeof body.declaredSizeBytes === "number" ? body.declaredSizeBytes : NaN
+  if (!Number.isInteger(declaredSizeBytes) || declaredSizeBytes < 0) {
+    return apiError(
+      c,
+      400,
+      "INVALID_SIZE",
+      "declaredSizeBytes must be a non-negative integer"
+    )
+  }
+
+  let folderId: string | null = null
+  if (typeof body.folderId === "string" && body.folderId.trim() !== "") {
+    folderId = body.folderId.trim()
     const folder = await findFolderById(c.env.DB, prefix, userId, folderId)
     if (!folder) {
       return apiError(c, 404, "FOLDER_NOT_FOUND", "Folder not found")
     }
   }
 
-  // 2. 文件重名冲突检查
+  let expiresIn: string | null = null
+  if (typeof body.expiresIn === "string" && body.expiresIn.trim() !== "") {
+    const trimmed = body.expiresIn.trim()
+    if (trimmed !== "never" && !isValidExpiresInPreset(trimmed)) {
+      return apiError(
+        c,
+        400,
+        "INVALID_EXPIRES_IN",
+        "Invalid expiration preset (allowed: never, 1h, 24h, 7d, 30d)"
+      )
+    }
+    expiresIn = trimmed
+  }
+
+  // 1. 检查同目录重名
   if (
-    await checkFileNameConflict(c.env.DB, prefix, userId, folderId, fileName)
+    await checkFileNameConflict(c.env.DB, prefix, userId, folderId, filename)
   ) {
     return apiError(
       c,
@@ -139,169 +140,312 @@ fileRoutes.post("/", async (c) => {
     )
   }
 
-  // 3. 限额预检
+  // 2. 限额校验
   const limits = await resolveUserLimits(c.env.DB, prefix, userId)
   const currentUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
-
-  if (announcedSize !== null && announcedSize > 0) {
-    const earlyCheck = validateUploadLimits(limits, currentUsage, announcedSize)
-    if (!earlyCheck.ok) {
-      return apiError(c, 413, earlyCheck.code, earlyCheck.error, {
-        limitBytes: earlyCheck.limitBytes
-      })
-    }
+  const check = validateUploadLimits(limits, currentUsage, declaredSizeBytes)
+  if (!check.ok) {
+    return apiError(c, 413, check.code, check.error, {
+      limitBytes: check.limitBytes
+    })
   }
 
-  // 4. 流式传输至 R2，边读边计数超限中止
+  assertS3Configured(c.env)
+
   const fileId = crypto.randomUUID()
   const r2Key = `u${userId}/${fileId}`
+  const expiresAt = calculateExpiresAt(expiresIn)
+  const contentType =
+    typeof body.contentType === "string" && body.contentType.trim() !== ""
+      ? body.contentType.trim()
+      : guessContentType(filename)
 
-  let bytesWritten = 0
-
-  if (announcedSize === null) {
-    // 无 Content-Length 的未知长度流式上传（如 chunked）：
-    // 边读 chunk 边累计限额判定，超限即时中止并返回 413，绝不落 R2 与 D1。
-    const reader = inputStream.getReader()
-    const chunks: Uint8Array[] = []
-    let readBytes = 0
-
-    try {
-      while (true) {
-        const { done, value: chunk } = await reader.read()
-        if (done) break
-        if (chunk && chunk.byteLength > 0) {
-          readBytes += chunk.byteLength
-          const check = validateUploadLimits(limits, currentUsage, readBytes)
-          if (!check.ok) {
-            await reader.cancel().catch(() => {})
-            return apiError(c, 413, check.code, check.error, {
-              limitBytes: check.limitBytes
-            })
-          }
-          chunks.push(chunk)
-        }
-      }
-    } catch (err) {
-      await reader.cancel().catch(() => {})
-      console.error("Chunked stream read error:", err)
-      return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
-    }
-
-    bytesWritten = readBytes
-
-    // 5. 写入前并发竞态复查（规格 §4）
-    const recheckedUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
-    const finalCheck = validateUploadLimits(
-      limits,
-      recheckedUsage,
-      bytesWritten
+  if (declaredSizeBytes <= MULTIPART_THRESHOLD_BYTES) {
+    // Single 模式
+    const presignedUrl = await getPresignedPutUrl(
+      c.env,
+      r2Key,
+      declaredSizeBytes,
+      contentType
     )
-    if (!finalCheck.ok) {
-      return apiError(c, 413, finalCheck.code, finalCheck.error, {
-        limitBytes: finalCheck.limitBytes
-      })
-    }
 
-    // 拼装完整 buffer 写入 R2（长度已知，杜绝 R2 对未知长度流抛 TypeError）
-    const fullBuffer = new Uint8Array(bytesWritten)
-    let offset = 0
-    for (const chunk of chunks) {
-      fullBuffer.set(chunk, offset)
-      offset += chunk.byteLength
-    }
-
-    try {
-      await c.env.FILES.put(r2Key, fullBuffer, {
-        httpMetadata: {
-          contentType: fileContentType
-        }
-      })
-    } catch (err) {
-      await c.env.FILES.delete(r2Key)
-      console.error("R2 write error:", err)
-      return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
-    }
-  } else {
-    // 已知长度流式上传（multipart 或带 Content-Length 的裸流）：保持零缓冲流式传输
-    const limitFailureRef: { current: LimitValidationResult | null } = {
-      current: null
-    }
-
-    const countingStream = new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        bytesWritten += chunk.byteLength
-        const check = validateUploadLimits(limits, currentUsage, bytesWritten)
-        if (!check.ok) {
-          limitFailureRef.current = check
-          controller.error(new Error(check.code))
-          return
-        }
-        controller.enqueue(chunk)
-      }
+    await insertPendingFileRecord(c.env.DB, prefix, {
+      id: fileId,
+      userId,
+      folderId,
+      name: filename,
+      sizeBytes: declaredSizeBytes,
+      contentType,
+      sha256: null,
+      r2Key,
+      uploadId: null,
+      expiresAt
     })
 
-    try {
-      let uploadStream: ReadableStream<Uint8Array> =
-        inputStream.pipeThrough(countingStream)
-      const FLS = (
-        globalThis as unknown as {
-          FixedLengthStream?: new (len: number) => TransformStream
-        }
-      ).FixedLengthStream
-      if (typeof FLS === "function") {
-        const fls = new FLS(announcedSize)
-        uploadStream.pipeTo(fls.writable).catch(() => {})
-        uploadStream = fls.readable
-      }
+    return c.json(
+      {
+        uploadId: fileId,
+        mode: "single",
+        partSize: MULTIPART_PART_SIZE_BYTES,
+        url: presignedUrl
+      },
+      201
+    )
+  } else {
+    // Multipart 模式
+    const s3UploadId = await initiateMultipartUpload(c.env, r2Key, contentType)
 
-      await c.env.FILES.put(r2Key, uploadStream, {
-        httpMetadata: {
-          contentType: fileContentType
-        }
-      })
-    } catch (err) {
-      // 写入失败或超限中止：立即删除 R2 对象，绝不落元数据（规格 §5.2）
-      await c.env.FILES.delete(r2Key)
-      const failure = limitFailureRef.current
-      if (failure && !failure.ok) {
-        return apiError(c, 413, failure.code, failure.error, {
-          limitBytes: failure.limitBytes
-        })
-      }
-      console.error("R2 stream write error:", err)
-      return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
+    await insertPendingFileRecord(c.env.DB, prefix, {
+      id: fileId,
+      userId,
+      folderId,
+      name: filename,
+      sizeBytes: declaredSizeBytes,
+      contentType,
+      sha256: null,
+      r2Key,
+      uploadId: s3UploadId,
+      expiresAt
+    })
+
+    return c.json(
+      {
+        uploadId: fileId,
+        mode: "multipart",
+        partSize: MULTIPART_PART_SIZE_BYTES
+      },
+      201
+    )
+  }
+})
+
+/**
+ * POST /api/files/uploads/:id/part-urls
+ * 批量签发分片上传预签名 URL（单次最多 50 个分片）。
+ */
+fileRoutes.post("/uploads/:id/part-urls", async (c) => {
+  const userId = currentUserId(c)
+  const prefix = getTablePrefix(c.env)
+  const fileId = c.req.param("id")?.trim()
+
+  const upload = await findPendingUploadById(c.env.DB, prefix, userId, fileId)
+  if (!upload) {
+    return apiError(
+      c,
+      404,
+      "UPLOAD_NOT_FOUND",
+      "Upload not found or already completed"
+    )
+  }
+
+  if (!upload.upload_id) {
+    return apiError(
+      c,
+      400,
+      "INVALID_UPLOAD_MODE",
+      "Single upload does not support part URLs"
+    )
+  }
+
+  const body = await readJsonBody<{ partNumbers?: unknown }>(c)
+  if (!body || !Array.isArray(body.partNumbers)) {
+    return apiError(c, 400, "INVALID_REQUEST", "partNumbers array is required")
+  }
+
+  const partNumbers = body.partNumbers
+  if (
+    partNumbers.length < 1 ||
+    partNumbers.length > 50 ||
+    partNumbers.some(
+      (p) => typeof p !== "number" || !Number.isInteger(p) || p < 1 || p > 10000
+    )
+  ) {
+    return apiError(
+      c,
+      400,
+      "INVALID_PART_NUMBERS",
+      "partNumbers must contain between 1 and 50 integer part numbers (1-10000)"
+    )
+  }
+
+  assertS3Configured(c.env)
+
+  const parts = await Promise.all(
+    partNumbers.map(async (partNumber) => {
+      const url = await getPresignedPartPutUrl(
+        c.env,
+        upload.r2_key,
+        upload.upload_id!,
+        partNumber
+      )
+      return { partNumber, url }
+    })
+  )
+
+  return c.json({ parts })
+})
+
+/**
+ * POST /api/files/uploads/:id/complete
+ * 完成直传：合并分片（若为 multipart）、HEAD 校验实际大小、复核限额并激活记录。
+ */
+fileRoutes.post("/uploads/:id/complete", async (c) => {
+  const userId = currentUserId(c)
+  const prefix = getTablePrefix(c.env)
+  const fileId = c.req.param("id")?.trim()
+
+  const upload = await findPendingUploadById(c.env.DB, prefix, userId, fileId)
+  if (!upload) {
+    return apiError(
+      c,
+      404,
+      "UPLOAD_NOT_FOUND",
+      "Upload not found or already completed"
+    )
+  }
+
+  const body =
+    (await readJsonBody<{
+      sha256?: unknown
+      parts?: unknown
+    }>(c)) ?? {}
+
+  const sha256 =
+    typeof body.sha256 === "string" && body.sha256.trim() !== ""
+      ? body.sha256.trim()
+      : null
+
+  if (upload.upload_id) {
+    // Multipart 模式：合并分片
+    if (
+      !Array.isArray(body.parts) ||
+      body.parts.length === 0 ||
+      body.parts.some(
+        (p: any) =>
+          !p ||
+          typeof p.partNumber !== "number" ||
+          !Number.isInteger(p.partNumber) ||
+          typeof p.etag !== "string" ||
+          !p.etag.trim()
+      )
+    ) {
+      return apiError(
+        c,
+        400,
+        "INVALID_PARTS",
+        "parts array with partNumber and etag is required for multipart completion"
+      )
     }
 
-    // 5. 写入成功后的并发竞态复查
-    const recheckedUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
-    const finalCheck = validateUploadLimits(
-      limits,
-      recheckedUsage,
-      bytesWritten
-    )
-    if (!finalCheck.ok) {
-      await c.env.FILES.delete(r2Key)
-      return apiError(c, 413, finalCheck.code, finalCheck.error, {
-        limitBytes: finalCheck.limitBytes
-      })
+    assertS3Configured(c.env)
+
+    try {
+      await completeMultipartUpload(
+        c.env,
+        upload.r2_key,
+        upload.upload_id,
+        body.parts as CompletedPart[]
+      )
+    } catch (err) {
+      console.error("Complete multipart upload error:", err)
+      return apiError(
+        c,
+        500,
+        "COMPLETE_FAILED",
+        "Failed to complete multipart upload on storage"
+      )
     }
   }
 
-  // 6. 落 D1 元数据
-  const expiresAt = calculateExpiresAt(expiresIn)
-  const fileRecord = await insertFileRecord(c.env.DB, prefix, {
-    id: fileId,
-    userId,
-    folderId,
-    name: fileName,
-    sizeBytes: bytesWritten,
-    contentType: fileContentType,
-    sha256: clientSha256,
-    r2Key,
-    expiresAt
+  // 统一通过 FILES.head 校验对象实际大小
+  const head = await c.env.FILES.head(upload.r2_key)
+  if (!head) {
+    return apiError(
+      c,
+      400,
+      "OBJECT_NOT_FOUND",
+      "Uploaded object not found in storage"
+    )
+  }
+
+  const actualSizeBytes = head.size
+
+  // 限额复核
+  const limits = await resolveUserLimits(c.env.DB, prefix, userId)
+  if (actualSizeBytes > limits.effectiveSingleMaxBytes) {
+    await c.env.FILES.delete(upload.r2_key)
+    await deletePendingUpload(c.env.DB, prefix, userId, fileId)
+    return apiError(
+      c,
+      413,
+      "FILE_TOO_LARGE",
+      "File exceeds single file size limit",
+      {
+        limitBytes: limits.effectiveSingleMaxBytes
+      }
+    )
+  }
+
+  const currentUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
+  const adjustedUsage = currentUsage - upload.size_bytes + actualSizeBytes
+  if (adjustedUsage > limits.effectiveQuotaBytes) {
+    await c.env.FILES.delete(upload.r2_key)
+    await deletePendingUpload(c.env.DB, prefix, userId, fileId)
+    return apiError(c, 413, "QUOTA_EXCEEDED", "Storage quota exceeded", {
+      limitBytes: limits.effectiveQuotaBytes
+    })
+  }
+
+  // 校验通过，原子转为 active 状态
+  await completeFileUpload(c.env.DB, prefix, userId, fileId, {
+    sizeBytes: actualSizeBytes,
+    sha256
   })
 
-  return c.json(fileRecord, 201)
+  const file = await findFileById(c.env.DB, prefix, userId, fileId)
+  if (!file) {
+    return apiError(
+      c,
+      500,
+      "FILE_ACTIVATE_FAILED",
+      "Failed to activate file record"
+    )
+  }
+
+  return c.json(toFileView(file), 200)
+})
+
+/**
+ * DELETE /api/files/uploads/:id
+ * 中止并清理直传任务：中止分片、删除对象、删除 pending 记录即时释放预占配额。
+ */
+fileRoutes.delete("/uploads/:id", async (c) => {
+  const userId = currentUserId(c)
+  const prefix = getTablePrefix(c.env)
+  const fileId = c.req.param("id")?.trim()
+
+  const upload = await findPendingUploadById(c.env.DB, prefix, userId, fileId)
+  if (!upload) {
+    return apiError(
+      c,
+      404,
+      "UPLOAD_NOT_FOUND",
+      "Upload not found or already completed"
+    )
+  }
+
+  if (upload.upload_id && isS3Configured(c.env)) {
+    try {
+      await abortMultipartUpload(c.env, upload.r2_key, upload.upload_id)
+    } catch (err) {
+      console.warn("Failed to abort multipart upload in storage:", err)
+    }
+  }
+
+  await c.env.FILES.delete(upload.r2_key)
+  await deletePendingUpload(c.env.DB, prefix, userId, fileId)
+
+  return c.json({ success: true })
 })
 
 fileRoutes.get("/:id/download", async (c) => {

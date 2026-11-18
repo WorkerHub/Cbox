@@ -29,6 +29,14 @@ export interface Env {
    * 部署期由 scripts/materialize-secrets.mjs 注入，不在仓库里写死。
    */
   TABLE_PREFIX?: string
+  /** S3 兼容直传凭证（组织级 secret）：R2 S3 API Access Key ID。 */
+  R2_ACCESS_KEY_ID?: string
+  /** S3 兼容直传凭证（组织级 secret）：R2 S3 API Secret Access Key。 */
+  R2_SECRET_ACCESS_KEY?: string
+  /** Cloudflare 账户 ID（组织级 secret）：用于推导 R2 S3 端点。 */
+  CLOUDFLARE_ACCOUNT_ID?: string
+  /** 可选自定义 fetch 函数，主要用于测试环境下 mock S3 网络交互。 */
+  S3_FETCH?: typeof fetch
 }
 
 /** 请求级上下文：会话中间件解析出来的身份，供路由读取。 */

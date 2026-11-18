@@ -9,6 +9,11 @@
  * - 失败只记日志下轮重试；管理面手动触发可独立调用。
  */
 import { consumeCounter, ensureCountersTable } from "../core/counters"
+import {
+  deletePendingUpload,
+  listStalePendingUploads
+} from "../db/queries/uploads"
+import { abortMultipartUpload, isS3Configured } from "../lib/s3"
 import { filesTable, sharesTable } from "../lib/tables"
 import { getTablePrefix } from "../lib/table-prefix"
 import type { Env } from "../types"
@@ -28,6 +33,7 @@ export interface CleanupJobResult {
   deletedFiles: number
   deletedShares: number
   deletedOrphans: number
+  abortedUploads: number
 }
 
 export interface ScheduledTaskOutcome {
@@ -53,6 +59,7 @@ export async function executeCleanupJob(
   let deletedFiles = 0
   let deletedShares = 0
   let deletedOrphans = 0
+  let abortedUploads = 0
 
   // 1. 物理删除已过期文件
   const expiredFiles = await env.DB.prepare(
@@ -128,14 +135,49 @@ export async function executeCleanupJob(
     console.error("Cleanup: orphan reconciliation encountered an error:", err)
   }
 
+  // 4. 清理超期 24 小时的 pending 上传任务
+  const stalePendingCutoffIso = new Date(
+    (now - ORPHAN_AGE_THRESHOLD_SECONDS) * 1000
+  ).toISOString()
+
+  try {
+    const staleUploads = await listStalePendingUploads(
+      env.DB,
+      prefix,
+      stalePendingCutoffIso
+    )
+
+    for (const upload of staleUploads) {
+      if (upload.upload_id && isS3Configured(env)) {
+        try {
+          await abortMultipartUpload(env, upload.r2_key, upload.upload_id)
+        } catch (err) {
+          console.warn("Cleanup: failed to abort multipart upload:", err)
+        }
+      }
+
+      try {
+        await env.FILES.delete(upload.r2_key)
+      } catch (err) {
+        console.warn("Cleanup: failed to delete pending R2 object:", err)
+      }
+
+      await deletePendingUpload(env.DB, prefix, upload.user_id, upload.id)
+      abortedUploads++
+    }
+  } catch (err) {
+    console.error("Cleanup: stale pending uploads cleanup error:", err)
+  }
+
   console.info(
-    `Cleanup completed (trigger=${options.trigger ?? "manual"}): ${deletedFiles} files, ${deletedShares} shares, ${deletedOrphans} orphans deleted`
+    `Cleanup completed (trigger=${options.trigger ?? "manual"}): ${deletedFiles} files, ${deletedShares} shares, ${deletedOrphans} orphans, ${abortedUploads} aborted uploads deleted`
   )
 
   return {
     deletedFiles,
     deletedShares,
-    deletedOrphans
+    deletedOrphans,
+    abortedUploads
   }
 }
 
