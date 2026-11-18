@@ -14,6 +14,13 @@ import {
 import { isSigningSecretConfigured } from "../core/auth"
 import { getSetting, isSetupPageEnabled, setSetting } from "./setup"
 import { getTablePrefix } from "./table-prefix"
+import {
+  DEFAULT_FILE_QUOTA_BYTES,
+  DEFAULT_FILE_SINGLE_MAX_BYTES,
+  MAX_LIMIT_MB,
+  bytesToMB,
+  mbToBytes
+} from "../core/limits"
 import { isEmailConfigured, readEmailSettings } from "../services/email"
 import type { EmailSettingsView } from "../services/email"
 import type { Env } from "../types"
@@ -175,6 +182,95 @@ export async function buildPublicBootstrap(env: Env): Promise<PublicBootstrap> {
 }
 
 /** 管理面设置文档：结构化、凭据脱敏；单人档不暴露注册段。 */
+export interface FileLimitSettings {
+  defaultQuotaBytes: number
+  defaultSingleMaxBytes: number
+  defaultQuotaMB: number
+  defaultSingleMaxMB: number
+}
+
+export interface FileLimitSettingsPatch {
+  defaultQuotaMB?: number
+  defaultSingleMaxMB?: number
+}
+
+export async function readFileLimitSettings(
+  env: Env
+): Promise<FileLimitSettings> {
+  const prefix = getTablePrefix(env)
+  const quotaStr = await getSetting(env.DB, prefix, "file_quota_default_bytes")
+  const singleMaxStr = await getSetting(
+    env.DB,
+    prefix,
+    "file_single_max_default_bytes"
+  )
+
+  const defaultQuotaBytes =
+    quotaStr && Number.isInteger(Number(quotaStr)) && Number(quotaStr) > 0
+      ? Number(quotaStr)
+      : DEFAULT_FILE_QUOTA_BYTES
+
+  const defaultSingleMaxBytes =
+    singleMaxStr &&
+    Number.isInteger(Number(singleMaxStr)) &&
+    Number(singleMaxStr) > 0
+      ? Number(singleMaxStr)
+      : DEFAULT_FILE_SINGLE_MAX_BYTES
+
+  return {
+    defaultQuotaBytes,
+    defaultSingleMaxBytes,
+    defaultQuotaMB: bytesToMB(defaultQuotaBytes),
+    defaultSingleMaxMB: bytesToMB(defaultSingleMaxBytes)
+  }
+}
+
+export async function writeFileLimitSettings(
+  env: Env,
+  patch: FileLimitSettingsPatch
+): Promise<{ ok: boolean; error?: string }> {
+  const prefix = getTablePrefix(env)
+  if (patch.defaultQuotaMB !== undefined) {
+    if (
+      !Number.isInteger(patch.defaultQuotaMB) ||
+      patch.defaultQuotaMB <= 0 ||
+      patch.defaultQuotaMB > MAX_LIMIT_MB
+    ) {
+      return {
+        ok: false,
+        error: `defaultQuotaMB must be an integer between 1 and ${MAX_LIMIT_MB}`
+      }
+    }
+    await setSetting(
+      env.DB,
+      prefix,
+      "file_quota_default_bytes",
+      String(mbToBytes(patch.defaultQuotaMB))
+    )
+  }
+
+  if (patch.defaultSingleMaxMB !== undefined) {
+    if (
+      !Number.isInteger(patch.defaultSingleMaxMB) ||
+      patch.defaultSingleMaxMB <= 0 ||
+      patch.defaultSingleMaxMB > MAX_LIMIT_MB
+    ) {
+      return {
+        ok: false,
+        error: `defaultSingleMaxMB must be an integer between 1 and ${MAX_LIMIT_MB}`
+      }
+    }
+    await setSetting(
+      env.DB,
+      prefix,
+      "file_single_max_default_bytes",
+      String(mbToBytes(patch.defaultSingleMaxMB))
+    )
+  }
+
+  return { ok: true }
+}
+
 export interface AdminSettings {
   appMode: typeof APP_MODE
   tablePrefix: string
@@ -182,6 +278,7 @@ export interface AdminSettings {
   profileLocks: ProfileLockSettings
   setup: { pageEnabled: boolean }
   email: EmailSettingsView
+  fileLimits: FileLimitSettings
 }
 
 export async function buildAdminSettings(env: Env): Promise<AdminSettings> {
@@ -193,7 +290,8 @@ export async function buildAdminSettings(env: Env): Promise<AdminSettings> {
       APP_MODE === "multi" ? await readRegistrationSettings(env) : null,
     profileLocks: await readProfileLockSettings(env),
     setup: { pageEnabled: await isSetupPageEnabled(env.DB, prefix) },
-    email: await readEmailSettings(env)
+    email: await readEmailSettings(env),
+    fileLimits: await readFileLimitSettings(env)
   }
 }
 

@@ -9,7 +9,17 @@ import type { Context } from "hono"
 import type { HonoEnv } from "../types"
 
 /** 错误响应可能用到的状态码（Hono 要求 ContentfulStatusCode）。 */
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 429 | 500 | 502 | 503
+export type ApiErrorStatus =
+  | 400
+  | 401
+  | 403
+  | 404
+  | 409
+  | 413
+  | 429
+  | 500
+  | 502
+  | 503
 
 export function clientIp(c: Context<HonoEnv>): string {
   const forwarded = c.req.header("x-forwarded-for")

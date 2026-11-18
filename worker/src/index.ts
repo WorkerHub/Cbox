@@ -12,10 +12,13 @@ import { getTablePrefix, isValidTablePrefix } from "./lib/table-prefix"
 import { authMiddleware } from "./middleware/auth"
 import { adminRoutes } from "./routes/admin"
 import { authRoutes } from "./routes/auth"
+import { fileRoutes } from "./routes/files"
+import { folderRoutes } from "./routes/folders"
 import { meRoutes } from "./routes/me"
-import { twoFactorManageRoutes } from "./routes/twofa-manage"
 import { publicRoutes } from "./routes/public"
+import { handlePublicShareDownload, shareRoutes } from "./routes/shares"
 import { setupRoutes } from "./routes/setup"
+import { twoFactorManageRoutes } from "./routes/twofa-manage"
 import { wakerRoutes } from "./routes/waker"
 import { runScheduledTask } from "./services/scheduled-task"
 import type { Env, HonoEnv } from "./types"
@@ -82,9 +85,15 @@ app.route("/api/public", publicRoutes)
 app.route("/api/auth", authRoutes)
 app.route("/api/auth/2fa", twoFactorManageRoutes)
 app.route("/api/me", meRoutes)
+app.route("/api/folders", folderRoutes)
+app.route("/api/files", fileRoutes)
+app.route("/api/shares", shareRoutes)
 app.route("/api/admin", adminRoutes)
 app.route("/api/setup", setupRoutes)
 app.route("/_waker", wakerRoutes)
+
+// 公开免登分享直链（规格 §6、§10）：GET /s/:token，必须在 SPA 回落之前注册
+app.get("/s/:token", handlePublicShareDownload)
 
 // PWA 安装清单（规格第 4 项）：由 Worker 从身份真源动态生成，名字零第二份字面量。
 // 必须在 SPA 回落 app.get("*") 之前注册；缓存口径与 /api/public 对齐。

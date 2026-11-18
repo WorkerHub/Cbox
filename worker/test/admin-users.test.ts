@@ -229,6 +229,7 @@ describe("全量用户列表", () => {
         "email",
         "emailVerified",
         "id",
+        "limits",
         "role",
         "status"
       ])

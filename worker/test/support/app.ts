@@ -12,6 +12,7 @@ import { SESSION_COOKIE } from "../../src/core/session"
 import { PROJECT_NAME } from "../../src/config/project"
 import type { Env } from "../../src/types"
 import { SqliteD1 } from "./sqlite-d1"
+import { MockR2Bucket } from "./mock-r2"
 
 export const TEST_SETUP_SECRET = "test-setup-secret"
 export const TEST_SIGNING_SECRET = "signing-secret-for-unit-tests-only"
@@ -36,20 +37,23 @@ function assets(): Fetcher {
 export interface TestContext {
   env: Env
   db: SqliteD1
+  r2: MockR2Bucket
 }
 
 /** 新环境：空库 + 假静态资源 + 测试密钥；默认不设 TABLE_PREFIX（走默认前缀）。 */
 export function makeContext(overrides: Partial<Env> = {}): TestContext {
   const db = new SqliteD1()
+  const r2 = new MockR2Bucket()
   const env = {
     DB: db as unknown as D1Database,
+    FILES: r2,
     ASSETS: assets(),
     SETUP_SECRET: TEST_SETUP_SECRET,
     SIGNING_SECRET: TEST_SIGNING_SECRET,
     APP_VERSION: TEST_APP_VERSION,
     ...overrides
   } as Env
-  return { env, db }
+  return { env, db, r2 }
 }
 
 /** 已初始化（默认前缀）的环境。 */
@@ -286,6 +290,21 @@ export async function loginUser(
     email: options.email,
     password: options.password ?? TEST_PASSWORD
   })
+}
+
+export async function adminCookie(
+  env: Env,
+  email = "owner@example.test"
+): Promise<string> {
+  return cookieFrom(await loginUser(env, { email }))
+}
+
+export async function memberCookie(
+  env: Env,
+  _userId?: number,
+  email = "user@example.test"
+): Promise<string> {
+  return cookieFrom(await loginUser(env, { email }))
 }
 
 /** 注册 + 登录，返回会话 Cookie（用于需要已登录的用例）。 */

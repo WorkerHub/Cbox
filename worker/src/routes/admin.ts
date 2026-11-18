@@ -25,13 +25,23 @@ import {
 } from "../db/queries/users"
 import { apiError, readJsonBody } from "../lib/http"
 import {
+  MAX_LIMIT_MB,
+  bytesToMB,
+  mbToBytes,
+  resolveUserLimits
+} from "../core/limits"
+import {
   buildAdminSettings,
+  type FileLimitSettingsPatch,
   type ProfileLockSettingsPatch,
   type RegistrationSettingsPatch,
+  writeFileLimitSettings,
   writeProfileLockSettings,
   writeRegistrationSettings,
   writeSetupPageEnabled
 } from "../lib/settings"
+import { userLimitsTable } from "../lib/tables"
+import { executeCleanupJob } from "../services/scheduled-task"
 import { runSetup } from "../lib/setup"
 import { getTablePrefix } from "../lib/table-prefix"
 import { isValidTimezone } from "../lib/timezone"
@@ -74,6 +84,7 @@ adminRoutes.put("/settings", async (c) => {
     profileLocks?: ProfileLockSettingsPatch
     setup?: { pageEnabled?: boolean }
     email?: EmailSettingsPatch
+    fileLimits?: FileLimitSettingsPatch
   }>(c)
   if (!body) {
     return apiError(c, 400, "INVALID_EMAIL", "Invalid request body")
@@ -81,6 +92,18 @@ adminRoutes.put("/settings", async (c) => {
 
   if (body.profileLocks !== undefined && body.profileLocks !== null) {
     await writeProfileLockSettings(c.env, body.profileLocks)
+  }
+
+  if (body.fileLimits !== undefined && body.fileLimits !== null) {
+    const limitResult = await writeFileLimitSettings(c.env, body.fileLimits)
+    if (!limitResult.ok) {
+      return apiError(
+        c,
+        400,
+        "INVALID_LIMITS",
+        limitResult.error ?? "Invalid file limits"
+      )
+    }
   }
 
   if (body.registration !== undefined && body.registration !== null) {
@@ -192,7 +215,30 @@ adminRoutes.get("/users", async (c) => {
     status = rawStatus
   }
   const prefix = getTablePrefix(c.env)
-  return c.json({ items: await listUsers(c.env.DB, prefix, status) })
+  const users = await listUsers(c.env.DB, prefix, status)
+  const itemsWithLimits = await Promise.all(
+    users.map(async (u) => {
+      const res = await resolveUserLimits(c.env.DB, prefix, u.id)
+      return {
+        ...u,
+        limits: {
+          quotaBytes: res.userQuotaBytes,
+          singleMaxBytes: res.userSingleMaxBytes,
+          quotaMB:
+            res.userQuotaBytes != null ? bytesToMB(res.userQuotaBytes) : null,
+          singleMaxMB:
+            res.userSingleMaxBytes != null
+              ? bytesToMB(res.userSingleMaxBytes)
+              : null,
+          effectiveQuotaBytes: res.effectiveQuotaBytes,
+          effectiveSingleMaxBytes: res.effectiveSingleMaxBytes,
+          effectiveQuotaMB: bytesToMB(res.effectiveQuotaBytes),
+          effectiveSingleMaxMB: bytesToMB(res.effectiveSingleMaxBytes)
+        }
+      }
+    })
+  )
+  return c.json({ items: itemsWithLimits })
 })
 
 adminRoutes.post("/users/:id/approve", async (c) => {
@@ -438,4 +484,113 @@ adminRoutes.post("/users/:id/delete", async (c) => {
 
   await deleteUser(c.env.DB, prefix, id)
   return c.json({ success: true })
+})
+
+// ─── 用户限额覆盖与清理任务（规格 §4、§9、§10）───────────────────────────
+
+adminRoutes.get("/users/:id/limits", async (c) => {
+  const id = Number(c.req.param("id"))
+  if (!Number.isInteger(id)) {
+    return apiError(c, 404, "USER_NOT_FOUND", "User not found")
+  }
+  const prefix = getTablePrefix(c.env)
+  const user = await findUserById(c.env.DB, prefix, id)
+  if (!user) return apiError(c, 404, "USER_NOT_FOUND", "User not found")
+
+  const res = await resolveUserLimits(c.env.DB, prefix, id)
+  return c.json({
+    userId: id,
+    quotaMB: res.userQuotaBytes != null ? bytesToMB(res.userQuotaBytes) : null,
+    singleMaxMB:
+      res.userSingleMaxBytes != null ? bytesToMB(res.userSingleMaxBytes) : null,
+    quotaBytes: res.userQuotaBytes,
+    singleMaxBytes: res.userSingleMaxBytes,
+    effectiveQuotaBytes: res.effectiveQuotaBytes,
+    effectiveSingleMaxBytes: res.effectiveSingleMaxBytes,
+    effectiveQuotaMB: bytesToMB(res.effectiveQuotaBytes),
+    effectiveSingleMaxMB: bytesToMB(res.effectiveSingleMaxBytes)
+  })
+})
+
+adminRoutes.put("/users/:id/limits", async (c) => {
+  const id = Number(c.req.param("id"))
+  if (!Number.isInteger(id)) {
+    return apiError(c, 404, "USER_NOT_FOUND", "User not found")
+  }
+  const prefix = getTablePrefix(c.env)
+  const user = await findUserById(c.env.DB, prefix, id)
+  if (!user) return apiError(c, 404, "USER_NOT_FOUND", "User not found")
+
+  const body = await readJsonBody<{
+    quotaMB?: unknown
+    singleMaxMB?: unknown
+  }>(c)
+  if (!body) return apiError(c, 400, "INVALID_REQUEST", "Invalid request body")
+
+  let quotaBytes: number | null = null
+  if (
+    body.quotaMB !== undefined &&
+    body.quotaMB !== null &&
+    body.quotaMB !== ""
+  ) {
+    const q = Number(body.quotaMB)
+    if (!Number.isInteger(q) || q <= 0 || q > MAX_LIMIT_MB) {
+      return apiError(
+        c,
+        400,
+        "INVALID_LIMITS",
+        `quotaMB must be a positive integer between 1 and ${MAX_LIMIT_MB}`
+      )
+    }
+    quotaBytes = mbToBytes(q)
+  }
+
+  let singleMaxBytes: number | null = null
+  if (
+    body.singleMaxMB !== undefined &&
+    body.singleMaxMB !== null &&
+    body.singleMaxMB !== ""
+  ) {
+    const s = Number(body.singleMaxMB)
+    if (!Number.isInteger(s) || s <= 0 || s > MAX_LIMIT_MB) {
+      return apiError(
+        c,
+        400,
+        "INVALID_LIMITS",
+        `singleMaxMB must be a positive integer between 1 and ${MAX_LIMIT_MB}`
+      )
+    }
+    singleMaxBytes = mbToBytes(s)
+  }
+
+  const now = new Date().toISOString()
+  await c.env.DB.prepare(
+    `INSERT INTO ${userLimitsTable(prefix)} (user_id, quota_bytes, single_max_bytes, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       quota_bytes = excluded.quota_bytes,
+       single_max_bytes = excluded.single_max_bytes,
+       updated_at = excluded.updated_at`
+  )
+    .bind(id, quotaBytes, singleMaxBytes, now)
+    .run()
+
+  const res = await resolveUserLimits(c.env.DB, prefix, id)
+  return c.json({
+    userId: id,
+    quotaMB: res.userQuotaBytes != null ? bytesToMB(res.userQuotaBytes) : null,
+    singleMaxMB:
+      res.userSingleMaxBytes != null ? bytesToMB(res.userSingleMaxBytes) : null,
+    quotaBytes: res.userQuotaBytes,
+    singleMaxBytes: res.userSingleMaxBytes,
+    effectiveQuotaBytes: res.effectiveQuotaBytes,
+    effectiveSingleMaxBytes: res.effectiveSingleMaxBytes,
+    effectiveQuotaMB: bytesToMB(res.effectiveQuotaBytes),
+    effectiveSingleMaxMB: bytesToMB(res.effectiveSingleMaxBytes)
+  })
+})
+
+adminRoutes.post("/cleanup", async (c) => {
+  const result = await executeCleanupJob(c.env, { trigger: "admin" })
+  return c.json({ success: true, ...result })
 })

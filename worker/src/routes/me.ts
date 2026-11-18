@@ -25,6 +25,7 @@ import { getTablePrefix } from "../lib/table-prefix"
 import { isValidTimezone } from "../lib/timezone"
 import { buildUserView } from "../lib/user-view"
 import { normalizeLanguage } from "../locales/email"
+import { getUserUsageBytes, resolveUserLimits } from "../core/limits"
 import type { HonoEnv } from "../types"
 
 export const meRoutes = new Hono<HonoEnv>()
@@ -36,6 +37,20 @@ meRoutes.get("/", async (c) => {
   const user = await findUserById(c.env.DB, prefix, currentUserId(c))
   if (!user) return apiError(c, 404, "USER_NOT_FOUND", "User not found")
   return c.json(await buildUserView(c.env, user))
+})
+
+meRoutes.get("/usage", async (c) => {
+  const userId = currentUserId(c)
+  const prefix = getTablePrefix(c.env)
+  const [limits, usedBytes] = await Promise.all([
+    resolveUserLimits(c.env.DB, prefix, userId),
+    getUserUsageBytes(c.env.DB, prefix, userId)
+  ])
+  return c.json({
+    usedBytes,
+    quotaBytes: limits.effectiveQuotaBytes,
+    singleMaxBytes: limits.effectiveSingleMaxBytes
+  })
 })
 
 /** 资料与偏好：只更新请求体里出现的字段；非法值整单拒绝。 */
