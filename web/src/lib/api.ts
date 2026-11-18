@@ -17,6 +17,11 @@ import type {
   AdminSettingsUpdate,
   AdminUser,
   AdminUserActionResult,
+  CreateShareResult,
+  DeleteFolderResult,
+  FileItem,
+  FolderItem,
+  FolderListResponse,
   LoginResult,
   Me,
   MeUpdateInput,
@@ -27,7 +32,9 @@ import type {
   SetupOwnerInput,
   SetupResult,
   SetupState,
-  TwoFactorMethod
+  ShareItem,
+  TwoFactorMethod,
+  UsageInfo
 } from "@/lib/api-types"
 
 const BASE = "/api"
@@ -62,7 +69,7 @@ interface ErrorEnvelope {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST" | "PUT" | "DELETE"
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   body?: unknown
   headers?: Record<string, string>
 }
@@ -263,7 +270,9 @@ export const meApi = {
     request<{ success: true }>(`/me/passkeys/${id}`, {
       method: "DELETE",
       body: { password }
-    })
+    }),
+
+  usage: () => request<UsageInfo>("/me/usage")
 }
 
 /* 系统管理 */
@@ -327,4 +336,138 @@ export const adminApi = {
     }),
 
   runSetup: () => request<AdminSetupResult>("/admin/setup", { method: "POST" })
+}
+
+/* 文件与文件夹管理（规格 §5、§6、§7、§10） */
+
+export const foldersApi = {
+  list: (parentId?: string | null) =>
+    request<FolderListResponse>(
+      parentId
+        ? `/folders?parentId=${encodeURIComponent(parentId)}`
+        : "/folders"
+    ),
+
+  create: (input: { parentId?: string | null; name: string }) =>
+    request<FolderItem>("/folders", { method: "POST", body: input }),
+
+  delete: (id: string) =>
+    request<DeleteFolderResult>(`/folders/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    })
+}
+
+export interface UploadFileOptions {
+  folderId?: string | null
+  expiresIn?: string | null
+  sha256?: string | null
+}
+
+export const filesApi = {
+  upload: (
+    file: File,
+    options?: UploadFileOptions,
+    onProgress?: (percent: number) => void
+  ): Promise<FileItem> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open("POST", `${BASE}/files`)
+      xhr.withCredentials = true
+
+      if (xhr.upload && onProgress) {
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && event.total > 0) {
+            const percent = Math.min(
+              100,
+              Math.max(0, Math.round((event.loaded / event.total) * 100))
+            )
+            onProgress(percent)
+          }
+        }
+      }
+
+      xhr.onload = () => {
+        let envelope: ErrorEnvelope = {}
+        try {
+          envelope = JSON.parse(xhr.responseText || "{}") as ErrorEnvelope
+        } catch {
+          // ignore json parse error
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(envelope as unknown as FileItem)
+          return
+        }
+
+        if (xhr.status === 401) {
+          void import("@/stores/auth").then(({ useAuthStore }) => {
+            useAuthStore.setState({ user: null, status: "ready" })
+          })
+        }
+
+        reject(
+          new ApiError({
+            status: xhr.status,
+            message: envelope.error ?? xhr.statusText,
+            code: envelope.code,
+            retryAfter: envelope.retryAfter,
+            detail: envelope.detail
+          })
+        )
+      }
+
+      xhr.onerror = () => {
+        reject(new ApiError({ status: 0, message: "Network error" }))
+      }
+
+      const formData = new FormData()
+      formData.append("file", file)
+      if (options?.folderId) {
+        formData.append("folderId", options.folderId)
+      }
+      if (options?.expiresIn) {
+        formData.append("expiresIn", options.expiresIn)
+      }
+      if (options?.sha256) {
+        formData.append("sha256", options.sha256)
+      }
+
+      xhr.send(formData)
+    })
+  },
+
+  patchExpiration: (id: string, expiresIn?: string | null) =>
+    request<{ id: string; expiresAt: string | null }>(
+      `/files/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        body: { expiresIn: expiresIn ?? "never" }
+      }
+    ),
+
+  delete: (id: string) =>
+    request<{ success: true }>(`/files/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    }),
+
+  downloadUrl: (id: string) =>
+    `${BASE}/files/${encodeURIComponent(id)}/download`
+}
+
+export const sharesApi = {
+  create: (fileId: string, expiresIn?: string | null) =>
+    request<CreateShareResult>(`/files/${encodeURIComponent(fileId)}/shares`, {
+      method: "POST",
+      body: { expiresIn: expiresIn || "24h" }
+    }),
+
+  list: (fileId: string) =>
+    request<{ items: ShareItem[] }>(
+      `/files/${encodeURIComponent(fileId)}/shares`
+    ),
+
+  delete: (id: string) =>
+    request<{ success: true }>(`/shares/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    })
 }

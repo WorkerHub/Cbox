@@ -83,7 +83,19 @@
       "DISPLAY_NAME_LOCKED": "昵称已被禁止修改",
       "SELF_ACTION_FORBIDDEN": "不能对自己执行该操作",
       "LAST_ADMIN": "至少保留一个可登录的管理员",
-      "USER_NOT_FOUND": "用户不存在"
+      "USER_NOT_FOUND": "用户不存在",
+      "FILE_TOO_LARGE": "文件大小超过单文件上限",
+      "QUOTA_EXCEEDED": "可用空间不足",
+      "FILE_NAME_CONFLICT": "当前文件夹下已存在同名文件",
+      "FOLDER_NAME_CONFLICT": "当前文件夹下已存在同名文件夹",
+      "FOLDER_NOT_FOUND": "文件夹不存在",
+      "FILE_NOT_FOUND": "文件不存在或已失效",
+      "SHARE_NOT_FOUND": "分享链接不存在或已失效",
+      "INVALID_FOLDER_NAME": "文件夹名称不合法",
+      "INVALID_FOLDER_ID": "根目录不可删除",
+      "INVALID_EXPIRES_IN": "过期时间预设不合法",
+      "UPLOAD_FAILED": "文件上传失败，请重试",
+      "MISSING_FILE": "请选择要上传的文件"
     }
   },
   "home": {
@@ -172,6 +184,7 @@
   },
   "workbench": {
     "title": "工作台",
+    "root": "全部文件",
     "nav": {
       "workbench": "工作台",
       "settings": "设置",
@@ -185,7 +198,83 @@
       "expand": "展开侧栏",
       "toggle": "切换侧栏"
     },
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "actions": {
+      "upload": "上传",
+      "newFolder": "新建文件夹",
+      "download": "下载",
+      "share": "分享",
+      "changeExpiration": "修改过期",
+      "delete": "删除",
+      "open": "打开",
+      "copy": "复制",
+      "copied": "已复制",
+      "revoke": "撤销"
+    },
+    "table": {
+      "name": "名称",
+      "size": "大小",
+      "expires": "过期状态",
+      "actions": "操作",
+      "empty": "暂无内容"
+    },
+    "status": {
+      "expired": "已过期",
+      "never": "永不过期"
+    },
+    "presets": {
+      "never": "永不过期",
+      "1h": "1 小时",
+      "24h": "24 小时",
+      "7d": "7 天",
+      "30d": "30 天",
+      "cappedAt": "到期时间已受文件到期封顶"
+    },
+    "usage": {
+      "label": "空间用量",
+      "singleMax": "单文件上限 {{size}}",
+      "detail": "{{used}} / {{total}}"
+    },
+    "uploadDialog": {
+      "title": "上传文件",
+      "select": "选择文件",
+      "expiration": "过期时间",
+      "progress": "正在上传 {{percent}}%",
+      "submit": "开始上传",
+      "calculating": "准备上传…"
+    },
+    "folderDialog": {
+      "title": "新建文件夹",
+      "placeholder": "文件夹名称",
+      "submit": "创建"
+    },
+    "shareDialog": {
+      "title": "公开分享",
+      "expiration": "失效时间",
+      "generate": "生成分享直链",
+      "directLink": "公开直链",
+      "copyLink": "复制直链",
+      "sha256": "文件 SHA-256",
+      "copySha256": "复制 SHA-256",
+      "existingShares": "已有分享",
+      "suffix": "尾号 {{suffix}}",
+      "downloads": "{{count}} 次下载",
+      "noDownloads": "0 次下载",
+      "revoked": "已撤销",
+      "noExisting": "暂无有效分享"
+    },
+    "editExpirationDialog": {
+      "title": "修改文件过期时间",
+      "expiration": "过期预设",
+      "submit": "保存"
+    },
+    "deleteDialog": {
+      "deleteFileTitle": "删除文件",
+      "deleteFolderTitle": "删除文件夹",
+      "deleteFileDesc": "确定删除该文件？已生成的分享直链将一并失效。",
+      "deleteFolderDesc": "确定删除该文件夹？该文件夹下的所有子文件夹、文件及分享将一并删除，无法恢复。",
+      "confirm": "确定删除"
+    }
   },
   "settings": {
     "title": "设置",
