@@ -95,7 +95,8 @@
       "INVALID_FOLDER_ID": "根目录不可删除",
       "INVALID_EXPIRES_IN": "过期时间预设不合法",
       "UPLOAD_FAILED": "文件上传失败，请重试",
-      "MISSING_FILE": "请选择要上传的文件"
+      "MISSING_FILE": "请选择要上传的文件",
+      "INVALID_LIMITS": "限额数值不合法（必须为 1 到 1048576 之间的正整数）"
     }
   },
   "home": {
@@ -354,7 +355,22 @@
       "email": "邮件配置",
       "registration": "注册与审核",
       "users": "用户管理",
+      "limits": "文件限额",
       "maintenance": "数据库维护"
+    },
+    "limits": {
+      "title": "文件限额（全局）",
+      "defaultQuotaMB": "默认总容量 (MB)",
+      "defaultSingleMaxMB": "默认单文件上限 (MB)",
+      "effectiveSingleMaxHint": "生效单文件上限：{{effective}} MB",
+      "hardCapCapped": "（配置为 {{configured}} MB，受平台硬顶 100 MB 限制生效 100 MB）",
+      "save": "保存文件限额",
+      "saving": "保存中…",
+      "saved": "文件限额已保存",
+      "errors": {
+        "required": "请输入限额数值",
+        "invalidRange": "必须为 1 到 1048576 之间的正整数"
+      }
     },
     "email": {
       "title": "邮件配置",
@@ -416,6 +432,22 @@
       "promote": "设为管理员",
       "demote": "设为成员",
       "roleChanged": "角色已更新",
+      "limits": {
+        "title": "用户限额",
+        "description": "设置 {{email}} 的限额覆盖。留空表示使用全局默认值。",
+        "action": "限额",
+        "userQuotaMB": "总容量限额 (MB)",
+        "userSingleMaxMB": "单文件上限 (MB)",
+        "globalDefaultHint": "全局默认：{{value}} MB",
+        "currentEffective": "当前生效：总容量 {{quota}} MB，单文件 {{singleMax}} MB",
+        "save": "保存",
+        "saving": "保存中…",
+        "saved": "用户限额已更新",
+        "clear": "清空覆盖",
+        "clearing": "清空中…",
+        "cleared": "已清空该用户覆盖设置",
+        "badge": "自定限额"
+      },
       "delete": {
         "title": "删除用户",
         "confirm": "删除",

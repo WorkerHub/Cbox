@@ -31,6 +31,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
       enableUser: vi.fn(),
       changeUserRole: vi.fn(),
       deleteUser: vi.fn(),
+      getUserLimits: vi.fn(),
+      updateUserLimits: vi.fn(),
       runSetup: vi.fn()
     },
     meApi: { ...actual.meApi, get: vi.fn(), update: vi.fn() }
@@ -56,6 +58,8 @@ beforeEach(() => {
   vi.mocked(adminApi.enableUser).mockReset()
   vi.mocked(adminApi.changeUserRole).mockReset()
   vi.mocked(adminApi.deleteUser).mockReset()
+  vi.mocked(adminApi.getUserLimits).mockReset()
+  vi.mocked(adminApi.updateUserLimits).mockReset()
 })
 
 describe("系统管理", () => {
@@ -381,7 +385,7 @@ describe("用户管理操作列", () => {
     return screen.findByRole("menu")
   }
 
-  it("「⋯」菜单给出四项操作，待批准行保留批准/拒绝且不提供停用/启用", async () => {
+  it("「⋯」菜单给出操作项，待批准行保留批准/拒绝且不提供停用/启用", async () => {
     const user = menuUser()
     await openUsers(
       [
@@ -406,6 +410,9 @@ describe("用户管理操作列", () => {
     const memberMenu = await openMenu(user, "user@example.com")
     expect(
       within(memberMenu).getByRole("menuitem", { name: "重置密码" })
+    ).toBeInTheDocument()
+    expect(
+      within(memberMenu).getByRole("menuitem", { name: "限额" })
     ).toBeInTheDocument()
     expect(
       within(memberMenu).getByRole("menuitem", { name: "停用" })
@@ -597,5 +604,137 @@ describe("用户管理操作列", () => {
     )
     expect(screen.getByRole("dialog")).toBeInTheDocument()
     expect(adminApi.deleteUser).toHaveBeenCalledWith(2)
+  })
+
+  it("点击限额打开用户限额弹窗，支持设置覆盖与清空覆盖", async () => {
+    const user = menuUser()
+    vi.mocked(adminApi.getUserLimits).mockResolvedValue({
+      userId: 2,
+      quotaBytes: null,
+      singleMaxBytes: null,
+      quotaMB: null,
+      singleMaxMB: null,
+      effectiveQuotaBytes: 104857600,
+      effectiveSingleMaxBytes: 104857600,
+      effectiveQuotaMB: 100,
+      effectiveSingleMaxMB: 100
+    })
+    vi.mocked(adminApi.updateUserLimits).mockResolvedValue({
+      success: true,
+      limits: {
+        userId: 2,
+        quotaBytes: 209715200,
+        singleMaxBytes: 20971520,
+        quotaMB: 200,
+        singleMaxMB: 20,
+        effectiveQuotaBytes: 209715200,
+        effectiveSingleMaxBytes: 20971520,
+        effectiveQuotaMB: 200,
+        effectiveSingleMaxMB: 20
+      }
+    })
+
+    await openUsers([adminUser()], user)
+    const menu = await openMenu(user, "user@example.com")
+    await user.click(within(menu).getByRole("menuitem", { name: "限额" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText("用户限额")).toBeInTheDocument()
+    expect(within(dialog).getByText(/user@example\.com/)).toBeInTheDocument()
+
+    // 填写限额覆盖
+    const quotaInput = within(dialog).getByLabelText("总容量限额 (MB)")
+    const singleInput = within(dialog).getByLabelText("单文件上限 (MB)")
+    await user.type(quotaInput, "200")
+    await user.type(singleInput, "20")
+
+    await user.click(within(dialog).getByRole("button", { name: "保存" }))
+    await waitFor(() =>
+      expect(adminApi.updateUserLimits).toHaveBeenCalledWith(2, {
+        quotaMB: 200,
+        singleMaxMB: 20
+      })
+    )
+
+    // 重新打开并清空覆盖
+    const reopenMenu = await openMenu(user, "user@example.com")
+    await user.click(within(reopenMenu).getByRole("menuitem", { name: "限额" }))
+    const reopenDialog = await screen.findByRole("dialog")
+    await user.click(
+      within(reopenDialog).getByRole("button", { name: "清空覆盖" })
+    )
+    await waitFor(() =>
+      expect(adminApi.updateUserLimits).toHaveBeenCalledWith(2, {
+        quotaMB: null,
+        singleMaxMB: null
+      })
+    )
+  })
+})
+
+describe("全局文件限额", () => {
+  it("修改全局文件限额并保存，生效值以服务端返回为准回显", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.settings).mockResolvedValue(adminSettings())
+    vi.mocked(adminApi.updateSettings).mockResolvedValue(
+      adminSettings({
+        fileLimits: {
+          defaultQuotaBytes: 209715200,
+          defaultSingleMaxBytes: 524288000,
+          defaultQuotaMB: 200,
+          defaultSingleMaxMB: 500,
+          effectiveSingleMaxBytes: 104857600,
+          effectiveSingleMaxMB: 100,
+          platformHardCapMB: 100
+        }
+      })
+    )
+
+    renderAdmin()
+    await user.click(await screen.findByRole("tab", { name: "文件限额" }))
+
+    const quotaInput = screen.getByLabelText("默认总容量 (MB)")
+    const singleInput = screen.getByLabelText("默认单文件上限 (MB)")
+
+    expect(quotaInput).toHaveValue(100)
+    expect(singleInput).toHaveValue(100)
+
+    await user.clear(quotaInput)
+    await user.type(quotaInput, "200")
+    await user.clear(singleInput)
+    await user.type(singleInput, "500")
+
+    await user.click(screen.getByRole("button", { name: "保存文件限额" }))
+
+    await waitFor(() =>
+      expect(adminApi.updateSettings).toHaveBeenCalledWith({
+        fileLimits: {
+          defaultQuotaMB: 200,
+          defaultSingleMaxMB: 500
+        }
+      })
+    )
+
+    // 验证回显生效值为 100 MB（而非输入值 500 MB），并展示硬顶受限标注
+    expect(singleInput).toHaveValue(100)
+    expect(screen.getByText(/受平台硬顶 100 MB 限制/)).toBeInTheDocument()
+  })
+
+  it("非法限额输入阻止提交并提示错误", async () => {
+    const user = userEvent.setup()
+    vi.mocked(adminApi.settings).mockResolvedValue(adminSettings())
+
+    renderAdmin()
+    await user.click(await screen.findByRole("tab", { name: "文件限额" }))
+
+    const quotaInput = screen.getByLabelText("默认总容量 (MB)")
+    await user.clear(quotaInput)
+    await user.type(quotaInput, "0")
+
+    await user.click(screen.getByRole("button", { name: "保存文件限额" }))
+    expect(adminApi.updateSettings).not.toHaveBeenCalled()
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "必须为 1 到 1048576 之间的正整数"
+    )
   })
 })

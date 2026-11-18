@@ -95,7 +95,8 @@
       "INVALID_FOLDER_ID": "Root folder cannot be deleted",
       "INVALID_EXPIRES_IN": "Invalid expiration preset",
       "UPLOAD_FAILED": "File upload failed, please retry",
-      "MISSING_FILE": "Please select a file to upload"
+      "MISSING_FILE": "Please select a file to upload",
+      "INVALID_LIMITS": "Invalid limit values (must be a positive integer between 1 and 1048576)"
     }
   },
   "home": {
@@ -354,7 +355,22 @@
       "email": "Email",
       "registration": "Registration & Approval",
       "users": "Users",
+      "limits": "File Limits",
       "maintenance": "Database Maintenance"
+    },
+    "limits": {
+      "title": "File Limits (Global)",
+      "defaultQuotaMB": "Default storage quota (MB)",
+      "defaultSingleMaxMB": "Default single file limit (MB)",
+      "effectiveSingleMaxHint": "Effective single file limit: {{effective}} MB",
+      "hardCapCapped": " (configured as {{configured}} MB, capped at 100 MB by platform limit)",
+      "save": "Save file limits",
+      "saving": "Saving…",
+      "saved": "File limits saved",
+      "errors": {
+        "required": "Please enter a limit value",
+        "invalidRange": "Must be a positive integer between 1 and 1048576"
+      }
     },
     "email": {
       "title": "Email",
@@ -416,6 +432,22 @@
       "promote": "Make admin",
       "demote": "Make member",
       "roleChanged": "Role updated",
+      "limits": {
+        "title": "User Limits",
+        "description": "Set limit overrides for {{email}}. Leave blank to use global defaults.",
+        "action": "Limits",
+        "userQuotaMB": "Storage quota limit (MB)",
+        "userSingleMaxMB": "Single file limit (MB)",
+        "globalDefaultHint": "Global default: {{value}} MB",
+        "currentEffective": "Current effective: Quota {{quota}} MB, Single file {{singleMax}} MB",
+        "save": "Save",
+        "saving": "Saving…",
+        "saved": "User limits updated",
+        "clear": "Clear overrides",
+        "clearing": "Clearing…",
+        "cleared": "User limit overrides cleared",
+        "badge": "Custom limits"
+      },
       "delete": {
         "title": "Delete user",
         "confirm": "Delete",

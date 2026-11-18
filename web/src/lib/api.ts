@@ -34,7 +34,9 @@ import type {
   SetupState,
   ShareItem,
   TwoFactorMethod,
-  UsageInfo
+  UsageInfo,
+  UserLimitsResponse,
+  UserLimitsUpdateInput
 } from "@/lib/api-types"
 
 const BASE = "/api"
@@ -334,6 +336,18 @@ export const adminApi = {
     request<AdminUserActionResult>(`/admin/users/${id}/delete`, {
       method: "POST"
     }),
+
+  getUserLimits: (id: number) =>
+    request<UserLimitsResponse>(`/admin/users/${id}/limits`),
+
+  updateUserLimits: (id: number, input: UserLimitsUpdateInput) =>
+    request<{ success: true; limits: UserLimitsResponse }>(
+      `/admin/users/${id}/limits`,
+      {
+        method: "PUT",
+        body: input
+      }
+    ),
 
   runSetup: () => request<AdminSetupResult>("/admin/setup", { method: "POST" })
 }

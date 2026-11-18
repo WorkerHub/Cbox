@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { applyAccountLanguage, changeLanguage, currentLanguage } from "@/i18n"
+import en from "@/locales/en.json"
+import zh from "@/locales/zh.json"
 import {
   detectBrowserLanguage,
   isLanguage,
@@ -61,5 +63,25 @@ describe("applyAccountLanguage", () => {
     await applyAccountLanguage("fr")
     expect(currentLanguage()).toBe("zh")
     expect(document.documentElement.lang).toBe("zh")
+  })
+})
+
+describe("中英翻译资源对齐", () => {
+  it("zh 与 en 资源键结构完全一致", () => {
+    function getKeys(obj: Record<string, unknown>, prefix = ""): string[] {
+      let keys: string[] = []
+      for (const [k, v] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}.${k}` : k
+        if (v && typeof v === "object" && !Array.isArray(v)) {
+          keys = keys.concat(getKeys(v as Record<string, unknown>, fullKey))
+        } else {
+          keys.push(fullKey)
+        }
+      }
+      return keys.sort()
+    }
+    const zhKeys = getKeys(zh as Record<string, unknown>)
+    const enKeys = getKeys(en as Record<string, unknown>)
+    expect(zhKeys).toEqual(enKeys)
   })
 })

@@ -1,24 +1,30 @@
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useSearchParams } from "react-router"
 import { adminApi } from "@/lib/api"
 import { describeApiError } from "@/lib/api-errors"
 import type { AdminSettings } from "@/lib/api-types"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CreateUserSection } from "@/pages/admin/create-user-section"
 import { EmailSection } from "@/pages/admin/email-section"
+import { FileLimitsSection } from "@/pages/admin/file-limits-section"
 import { MaintenanceSection } from "@/pages/admin/maintenance-section"
 import { RegistrationSection } from "@/pages/admin/registration-section"
 import { UsersSection } from "@/pages/admin/users-section"
 
 /**
  * 系统管理页（规格 §6.1，仅管理员）：邮件配置、注册/审核、用户列表、
- * setup 页开关与数据库维护。菜单隐藏只是体验，接口层 403 才是边界。
+ * 文件限额、setup 页开关与数据库维护。菜单隐藏只是体验，接口层 403 才是边界。
  */
 export function AdminPage() {
   const { t } = useTranslation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get("tab") || "email"
+  const setTab = (nextTab: string) => {
+    setSearchParams(nextTab === "email" ? {} : { tab: nextTab })
+  }
   const [settings, setSettings] = useState<AdminSettings | null>(null)
   const [error, setError] = useState("")
-  const [tab, setTab] = useState("email")
 
   const load = useCallback(async () => {
     setError("")
@@ -53,6 +59,7 @@ export function AdminPage() {
               {t("admin.tabs.registration")}
             </TabsTrigger>
             <TabsTrigger value="users">{t("admin.tabs.users")}</TabsTrigger>
+            <TabsTrigger value="limits">{t("admin.tabs.limits")}</TabsTrigger>
             <TabsTrigger value="maintenance">
               {t("admin.tabs.maintenance")}
             </TabsTrigger>
@@ -67,8 +74,11 @@ export function AdminPage() {
           <TabsContent value="users" className="pt-4">
             <div className="space-y-4">
               <CreateUserSection />
-              <UsersSection />
+              <UsersSection globalLimits={settings.fileLimits} />
             </div>
+          </TabsContent>
+          <TabsContent value="limits" className="pt-4">
+            <FileLimitsSection settings={settings} onSaved={setSettings} />
           </TabsContent>
           <TabsContent value="maintenance" className="pt-4">
             <MaintenanceSection settings={settings} onSaved={setSettings} />

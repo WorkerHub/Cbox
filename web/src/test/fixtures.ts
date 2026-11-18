@@ -78,6 +78,15 @@ export function adminSettings(
       resend: { apiKeySet: false, from: "", fromName: "" },
       configured: true
     },
+    fileLimits: {
+      defaultQuotaBytes: 104857600,
+      defaultSingleMaxBytes: 104857600,
+      defaultQuotaMB: 100,
+      defaultSingleMaxMB: 100,
+      effectiveSingleMaxBytes: 104857600,
+      effectiveSingleMaxMB: 100,
+      platformHardCapMB: 100
+    },
     ...overrides
   }
 }

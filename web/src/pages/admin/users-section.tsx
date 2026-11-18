@@ -5,6 +5,7 @@ import {
   EllipsisIcon,
   KeyRoundIcon,
   ShieldCheckIcon,
+  SlidersIcon,
   Trash2Icon,
   UserIcon
 } from "lucide-react"
@@ -43,9 +44,11 @@ import { describeApiError } from "@/lib/api-errors"
 import type {
   AdminResetPasswordResult,
   AdminUser,
+  FileLimitSettings,
   UserRole
 } from "@/lib/api-types"
 import { intlLocale } from "@/lib/language"
+import { UserLimitsDialog } from "@/pages/admin/user-limits-dialog"
 import { useAuthStore } from "@/stores/auth"
 
 const ROLE_VARIANT = { admin: "secondary", user: "outline" } as const
@@ -62,7 +65,11 @@ const STATUS_VARIANT = {
  * 一次性密码只进组件 state，弹窗关闭即清——不写本地存储、不进提示语与 URL。
  * 对自己隐藏停用/删除，服务端的 SELF_ACTION_FORBIDDEN 仍是最终边界。
  */
-export function UsersSection() {
+export function UsersSection({
+  globalLimits
+}: {
+  globalLimits?: FileLimitSettings
+} = {}) {
   const { t } = useTranslation()
   const selfId = useAuthStore((state) => state.user?.id)
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -73,6 +80,7 @@ export function UsersSection() {
     useState<AdminResetPasswordResult | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null)
   const [deleteError, setDeleteError] = useState("")
+  const [limitsTarget, setLimitsTarget] = useState<AdminUser | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -228,6 +236,12 @@ export function UsersSection() {
                           {t("admin.users.emailUnverified")}
                         </Badge>
                       )}
+                      {user.limits?.quotaMB != null ||
+                      user.limits?.singleMaxMB != null ? (
+                        <Badge variant="outline">
+                          {t("admin.users.limits.badge")}
+                        </Badge>
+                      ) : null}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {t("admin.users.createdAt", {
@@ -295,6 +309,13 @@ export function UsersSection() {
                         >
                           <KeyRoundIcon aria-hidden="true" />
                           {t("admin.users.reset.title")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={busyId === user.id}
+                          onSelect={() => setLimitsTarget(user)}
+                        >
+                          <SlidersIcon aria-hidden="true" />
+                          {t("admin.users.limits.action")}
                         </DropdownMenuItem>
                         {user.status === "disabled" ? (
                           <DropdownMenuItem
@@ -447,6 +468,13 @@ export function UsersSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UserLimitsDialog
+        user={limitsTarget}
+        globalLimits={globalLimits}
+        onClose={() => setLimitsTarget(null)}
+        onSaved={load}
+      />
     </section>
   )
 }
