@@ -80,7 +80,9 @@ describe("setup：初始化与回显", () => {
     const { env, db } = makeContext()
     await postSetup(env, SECRET_HEADER)
     expect(readSetting(db, activePrefix(env), "setup_page_enabled")).toBe("0")
-    expect(readSetting(db, activePrefix(env), "project_slug")).toBe(PROJECT_SLUG)
+    expect(readSetting(db, activePrefix(env), "project_slug")).toBe(
+      PROJECT_SLUG
+    )
   })
 
   it("重复 setup：全部 skipped，且不覆盖已有设置", async () => {
