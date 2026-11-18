@@ -165,8 +165,7 @@ fileRoutes.post("/uploads/init", async (c) => {
     const presignedUrl = await getPresignedPutUrl(
       c.env,
       r2Key,
-      declaredSizeBytes,
-      contentType
+      declaredSizeBytes
     )
 
     await insertPendingFileRecord(c.env.DB, prefix, {

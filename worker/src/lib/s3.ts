@@ -42,13 +42,12 @@ export function getS3Client(env: Env): AwsClient {
 
 /**
  * 为单文件直传生成预签名 PUT URL（15 分钟有效）。
- * 强制绑定 Content-Length（防止篡改与限额突破）与 Content-Type。
+ * 仅强制绑定 Content-Length（防止篡改与限额突破），不绑定 Content-Type。
  */
 export async function getPresignedPutUrl(
   env: Env,
   key: string,
   sizeBytes: number,
-  contentType: string,
   expiresInSeconds: number = PRESIGNED_URL_EXPIRES_SECONDS
 ): Promise<string> {
   const client = getS3Client(env)
@@ -56,8 +55,7 @@ export async function getPresignedPutUrl(
   const req = new Request(url, {
     method: "PUT",
     headers: {
-      "Content-Length": String(sizeBytes),
-      "Content-Type": contentType
+      "Content-Length": String(sizeBytes)
     }
   })
   const signed = await client.sign(req, {

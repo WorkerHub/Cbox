@@ -157,7 +157,7 @@ export async function checkFileNameConflict(
           .prepare(
             `SELECT 1 AS exists_row
                FROM ${filesTable(prefix)}
-              WHERE user_id = ? AND folder_id IS NULL AND status = 'active' AND name = ? COLLATE NOCASE
+              WHERE user_id = ? AND folder_id IS NULL AND name = ? COLLATE NOCASE
               LIMIT 1`
           )
           .bind(userId, name)
@@ -165,7 +165,7 @@ export async function checkFileNameConflict(
           .prepare(
             `SELECT 1 AS exists_row
                FROM ${filesTable(prefix)}
-              WHERE user_id = ? AND folder_id = ? AND status = 'active' AND name = ? COLLATE NOCASE
+              WHERE user_id = ? AND folder_id = ? AND name = ? COLLATE NOCASE
               LIMIT 1`
           )
           .bind(userId, folderId, name)

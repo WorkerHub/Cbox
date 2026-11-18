@@ -10,7 +10,7 @@ import {
 } from "./support/app"
 
 describe("Direct Uploads 直传架构全流程测试 (Todo #14)", () => {
-  it("Single 模式直传：init 签发带 Content-Length 与 Content-Type 约束的预签名 URL，完成后转为 active", async () => {
+  it("Single 模式直传：init 签发仅绑定 Content-Length 的预签名 URL，完成后转为 active", async () => {
     const { env, db } = await initializedContext()
     const prefix = activePrefix(env)
     const user = await seedSession(db, prefix, { role: "user" })
@@ -44,7 +44,7 @@ describe("Direct Uploads 直传架构全流程测试 (Todo #14)", () => {
     expect(initData.partSize).toBe(10 * 1024 * 1024)
     expect(initData.url).toContain("X-Amz-SignedHeaders=")
     expect(initData.url).toContain("content-length")
-    expect(initData.url).toContain("content-type")
+    expect(initData.url).not.toContain("content-type")
 
     // 验证 pending 状态已落库，但不在文件列表中出现
     const pendingRow = await env.DB.prepare(
@@ -283,6 +283,29 @@ describe("Direct Uploads 直传架构全流程测试 (Todo #14)", () => {
       { cookie: user.cookie }
     )
     expect(conflictRes.status).toBe(409)
+
+    // 1b. 尚未完成的 pending 记录同样占用文件名，后续同名 init 报 409
+    const pendingInit = await postJson(
+      env,
+      "/api/files/uploads/init",
+      {
+        filename: "pending-name.txt",
+        declaredSizeBytes: 10
+      },
+      { cookie: user.cookie }
+    )
+    expect(pendingInit.status).toBe(201)
+
+    const pendingConflictRes = await postJson(
+      env,
+      "/api/files/uploads/init",
+      {
+        filename: "pending-name.txt",
+        declaredSizeBytes: 10
+      },
+      { cookie: user.cookie }
+    )
+    expect(pendingConflictRes.status).toBe(409)
 
     // 2. 单直传超过 single 上限 (例如设限 100 字节，传 200 字节)
     await env.DB.prepare(

@@ -40,17 +40,11 @@ describe("S3 Client & SigV4 Helper (s3.ts)", () => {
     )
   })
 
-  it("getPresignedPutUrl 生成单文件上传预签名 URL（绑定 Content-Length 与 Content-Type）", async () => {
+  it("getPresignedPutUrl 生成单文件上传预签名 URL（仅绑定 Content-Length，不绑定 Content-Type）", async () => {
     const key = "u1/test-file.png"
     const sizeBytes = 1048576 // 1 MiB
-    const contentType = "image/png"
 
-    const urlStr = await getPresignedPutUrl(
-      dummyEnv,
-      key,
-      sizeBytes,
-      contentType
-    )
+    const urlStr = await getPresignedPutUrl(dummyEnv, key, sizeBytes)
     const url = new URL(urlStr)
 
     expect(url.origin).toBe("https://dummy-account-id.r2.cloudflarestorage.com")
@@ -59,10 +53,10 @@ describe("S3 Client & SigV4 Helper (s3.ts)", () => {
     expect(url.searchParams.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256")
     expect(url.searchParams.get("X-Amz-Signature")).toBeTruthy()
 
-    // 关键断言：X-Amz-SignedHeaders 必须包含 content-length 与 content-type
+    // 关键断言：X-Amz-SignedHeaders 必须包含 content-length，且不得包含 content-type
     const signedHeaders = url.searchParams.get("X-Amz-SignedHeaders")
     expect(signedHeaders).toContain("content-length")
-    expect(signedHeaders).toContain("content-type")
+    expect(signedHeaders).not.toContain("content-type")
     expect(signedHeaders).toContain("host")
   })
 
