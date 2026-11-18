@@ -23,7 +23,9 @@ describe("calculateFileSha256", () => {
   it("支持多分片滚动计算且结果与单片一致", async () => {
     const content = "a".repeat(1024 * 10)
     const file = new File([content], "large.txt", { type: "text/plain" })
-    const singleHash = await calculateFileSha256(file, { chunkSize: 1024 * 100 })
+    const singleHash = await calculateFileSha256(file, {
+      chunkSize: 1024 * 100
+    })
     const chunkedHash = await calculateFileSha256(file, { chunkSize: 1024 })
     expect(chunkedHash).toBe(singleHash)
   })

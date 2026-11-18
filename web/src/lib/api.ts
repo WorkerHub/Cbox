@@ -455,7 +455,9 @@ function uploadChunkWithProgress(
       if (settled) return
       settled = true
       cleanup()
-      reject(new ApiError({ status: 0, message: "Network error during upload" }))
+      reject(
+        new ApiError({ status: 0, message: "Network error during upload" })
+      )
     }
 
     xhr.onabort = () => {
@@ -482,12 +484,7 @@ async function uploadPartWithRetry(
       throw new DOMException("The user aborted a request.", "AbortError")
     }
     try {
-      return await uploadChunkWithProgress(
-        url,
-        chunk,
-        signal,
-        onProgress
-      )
+      return await uploadChunkWithProgress(url, chunk, signal, onProgress)
     } catch (err: unknown) {
       if (
         signal?.aborted ||

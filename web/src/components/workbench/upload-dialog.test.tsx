@@ -61,7 +61,9 @@ describe("UploadDialog", () => {
     const file = new File(["a".repeat(1024)], "report.pdf", {
       type: "application/pdf"
     })
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement
     await user.upload(fileInput, file)
 
     expect(await screen.findByText(/report\.pdf \(1 KB\)/)).toBeInTheDocument()
@@ -89,7 +91,9 @@ describe("UploadDialog", () => {
         onProgress?.({ loaded: 100, total: 1000, percent: 10 })
         return new Promise((_resolve, reject) => {
           caughtSignal?.addEventListener("abort", () => {
-            reject(new DOMException("The user aborted a request.", "AbortError"))
+            reject(
+              new DOMException("The user aborted a request.", "AbortError")
+            )
           })
         })
       }
@@ -107,7 +111,9 @@ describe("UploadDialog", () => {
     const file = new File(["a".repeat(1000)], "large.zip", {
       type: "application/zip"
     })
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement
     await user.upload(fileInput, file)
 
     const submitBtn = screen.getByRole("button", { name: "开始上传" })

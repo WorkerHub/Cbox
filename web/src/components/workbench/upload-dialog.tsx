@@ -216,11 +216,7 @@ export function UploadDialog({
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCancel}
-            >
+            <Button type="button" variant="outline" onClick={handleCancel}>
               {t("common.actions.cancel")}
             </Button>
             <Button type="submit" disabled={busy || !selectedFile}>

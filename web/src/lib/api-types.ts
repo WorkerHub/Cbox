@@ -359,4 +359,3 @@ export type UploadCompleteMultipartInput = {
 export type UploadCompleteInput =
   | UploadCompleteSingleInput
   | UploadCompleteMultipartInput
-

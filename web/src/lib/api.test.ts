@@ -282,8 +282,11 @@ describe("filesApi 直传与分片上传", () => {
       })
     )
 
-    const progressUpdates: Array<{ loaded: number; total: number; percent: number }> =
-      []
+    const progressUpdates: Array<{
+      loaded: number
+      total: number
+      percent: number
+    }> = []
 
     const result = await filesApi.upload(
       file,
@@ -349,8 +352,11 @@ describe("filesApi 直传与分片上传", () => {
       })
     )
 
-    const progressUpdates: Array<{ loaded: number; total: number; percent: number }> =
-      []
+    const progressUpdates: Array<{
+      loaded: number
+      total: number
+      percent: number
+    }> = []
 
     const result = await filesApi.upload(
       file,
@@ -391,7 +397,10 @@ describe("filesApi 直传与分片上传", () => {
             url: "https://r2.example.com/fail-put"
           })
         }
-        if (url === "/api/files/uploads/upload-fail-1" && init.method === "DELETE") {
+        if (
+          url === "/api/files/uploads/upload-fail-1" &&
+          init.method === "DELETE"
+        ) {
           abortCalledWith = "upload-fail-1"
           return respond(200, { success: true })
         }
@@ -421,7 +430,10 @@ describe("filesApi 直传与分片上传", () => {
             url: "https://r2.example.com/abort-put"
           })
         }
-        if (url === "/api/files/uploads/upload-abort-1" && init.method === "DELETE") {
+        if (
+          url === "/api/files/uploads/upload-abort-1" &&
+          init.method === "DELETE"
+        ) {
           abortCalledWith = "upload-abort-1"
           return respond(200, { success: true })
         }
