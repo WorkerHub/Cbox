@@ -6,6 +6,8 @@
 export interface Env {
   /** 运行库（D1）：表名一律经 getTablePrefix() 拼前缀。 */
   DB: D1Database
+  /** 业务文件对象存储（专属 R2 桶）：绑定名 FILES。 */
+  FILES: R2Bucket
   /** Workers Static Assets：前端构建产物 web/dist。 */
   ASSETS: Fetcher
   /** setup / 数据库维护的 X-Setup-Secret 令牌（仓库级 secret）。 */

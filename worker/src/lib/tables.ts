@@ -32,6 +32,13 @@ export const settingsTable = (prefix: string) =>
 export const countersTable = (prefix: string) =>
   tableName(prefix, "auth_counters")
 
+/** 业务表（规格 §8）：文件夹、文件、公开分享与单人限额覆盖。 */
+export const foldersTable = (prefix: string) => tableName(prefix, "folders")
+export const filesTable = (prefix: string) => tableName(prefix, "files")
+export const sharesTable = (prefix: string) => tableName(prefix, "shares")
+export const userLimitsTable = (prefix: string) =>
+  tableName(prefix, "user_limits")
+
 /**
  * 迁移账本（规格 §5.1）：表名带前导下划线、排在业务表之前——
  * `_<前缀>schema_migrations`、无前缀时 `_schema_migrations`。换前缀即换一套账本。
