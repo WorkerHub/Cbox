@@ -67,8 +67,8 @@
     - `DEFAULT_FILE_SINGLE_MAX_BYTES = 2 * 1024 ** 3`（2 GiB = 2,147,483,648 字节）。
   - `resolveFileLimits`：移除对平台硬顶的 `Math.min` 钳制，`effectiveSingleMaxBytes` 直接等于解析得到的生效配置（全局配置或单人覆盖）。
 - **`worker/src/lib/settings.ts`**：
-  - 从 `FileLimitSettings` 类型定义及 `readFileLimitSettings` 函数返回值中删除 `platformHardCapMB` 字段。
-  - `effectiveSingleMaxMB` 保留表示生效的单文件上限（无硬顶钳制后的实际值）。
+  - `FileLimitSettings` 类型定义及 `readFileLimitSettings` 返回值删去 `effectiveSingleMaxBytes`、`effectiveSingleMaxMB`、`platformHardCapMB` 三个字段，仅保留 `defaultQuotaBytes/defaultSingleMaxBytes/defaultQuotaMB/defaultSingleMaxMB`（去钳制后 effective ≡ default，冗余；与前端 #15 的 api-types 清理完全一致）。
+  - 运行时校验用的 `worker/src/core/limits.ts` 中 `UserLimitsResolution.effectiveSingleMaxBytes` 保留不动，两者不混淆。
 - **`worker/src/routes/admin.ts`**：
   - 调整更新限额时的数值校验规则，移除 100 MiB 上限限制，支持管理员配置数 GiB 的单文件限额。
 
@@ -106,10 +106,10 @@
 - **`worker/src/routes/files.ts`**：
   - **移除旧路由**：彻底删除旧的 `POST /`（即 `POST /api/files`）中转缓冲上传端点。
   - **端点 1：`POST /uploads/init`**：
-    - 入参：`{ filename: string, declaredSizeBytes: number, folderId?: string, expirySeconds?: number }`。
+    - 入参：`{ filename: string, declaredSizeBytes: number, folderId?: string, expiresIn?: string }`（沿用现行 `expiresIn` preset 字符串，如 `never`/`1h`/`24h`/`7d`/`30d`，走现有 `isValidExpiresInPreset` + `calculateExpiresAt` 计算过期时间）。
     - 鉴权：需要有效用户 Session。
     - 校验限额：解析该用户生效的单文件上限及存储配额。若 `declaredSizeBytes > effectiveSingleMaxBytes` 或 `currentUsage + declaredSizeBytes > quotaBytes`，直接返回 400 拒绝。
-    - 生成对象 Key：沿用既有规则 `files/${userId}/${crypto.randomUUID()}/${filename}`。
+    - 生成对象 Key：沿用现行规则 `u${userId}/${fileId}`（`fileId = crypto.randomUUID()`，与数据库记录 ID 同值）。
     - 模式分支：
       - 若 `declaredSizeBytes <= 100 * 1024 * 1024`（100 MiB）：判定为 `single` 模式。调用 `presignPut` 生成单文件预签名 PUT URL（绑定 Content-Length），`upload_id` 置为 `NULL`。
       - 若 `declaredSizeBytes > 100 * 1024 * 1024`：判定为 `multipart` 模式。调用 S3 `createMultipartUpload` 获取 S3 `uploadId`，设置分片大小 `partSize = 10 * 1024 * 1024`（10 MiB）。
@@ -203,7 +203,7 @@
 - **`worker/test/limits.test.ts`**：
   - 移除原 100 MiB 硬顶截断用例，改为断言大限额正常生效；默认值断言同步更新为 2 GiB 与 10 GiB。
 - **`worker/test/admin-limits.test.ts`**：
-  - 断言更新为新默认值（10240 MiB / 2048 MiB），验证响应中不再包含 `platformHardCapMB`。
+  - 断言更新为新默认值（10240 MiB / 2048 MiB），验证响应中不再包含 `effectiveSingleMaxBytes`、`effectiveSingleMaxMB` 与 `platformHardCapMB`。
 - **`worker/test/migrations-ledger.test.ts`**：
   - 更新迁移列表长度预期（增至 2 项）；放行空 SQL 的 prepare-only 迁移；验证增量升级在已有生产数据库账本环境下的幂等性。
 - **`worker/test/schema-sql.test.ts`**：
@@ -251,7 +251,7 @@
    - 本地开发与 CI 自动化测试均采用 Mock S3 机制或桩注入，不依赖真实凭据，不会阻塞代码编写与测试验证。
 2. **跨任务协作（前端 #15）**：
    - 前端任务 #15 负责直传上传组件（upload-dialog）及去除管理页面 100 MiB 提示。
-   - 后端接口变更（移除 `platformHardCapMB`）向前兼容，前后端可并行开发。
+   - 后端接口变更（移除 `effectiveSingleMaxBytes`/`effectiveSingleMaxMB`/`platformHardCapMB`）与前端 #15 的 api-types 清理完全一致，前后端可并行开发。
 3. **团队纪律与红线**：
    - 严守红线：不私自开 PR、不私自触发评审、不执行合并与部署操作；交付结果在 review 关口等待指挥官处理。
    - 严禁任何敏感密钥出现在代码、提交记录、日志输出或沟通内容中。
