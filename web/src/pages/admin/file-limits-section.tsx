@@ -13,7 +13,7 @@ import { validateLimitMB } from "@/lib/limits"
 
 /**
  * 系统管理 · 文件限额（规格 §4、§7）。
- * 全局默认总容量与单文件上限配置；生效值以服务端返回为准（受平台硬顶限制）。
+ * 全局默认总容量与单文件上限配置（填多少生效多少，无平台硬顶钳制）。
  */
 export function FileLimitsSection(props?: {
   settings?: AdminSettings
@@ -29,27 +29,19 @@ export function FileLimitsSection(props?: {
 
   const limits = settings?.fileLimits
 
-  // 生效值以服务端返回为准
-  const initialEffectiveSingle =
-    limits?.effectiveSingleMaxMB ??
-    Math.min(limits?.defaultSingleMaxMB ?? 100, 100)
-
   const [defaultQuotaMB, setDefaultQuotaMB] = useState(
     String(limits?.defaultQuotaMB ?? 100)
   )
   const [defaultSingleMaxMB, setDefaultSingleMaxMB] = useState(
-    String(initialEffectiveSingle)
+    String(limits?.defaultSingleMaxMB ?? 100)
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
     if (!settings) return
-    const eff =
-      settings.fileLimits.effectiveSingleMaxMB ??
-      Math.min(settings.fileLimits.defaultSingleMaxMB, 100)
     setDefaultQuotaMB(String(settings.fileLimits.defaultQuotaMB ?? 100))
-    setDefaultSingleMaxMB(String(eff))
+    setDefaultSingleMaxMB(String(settings.fileLimits.defaultSingleMaxMB ?? 100))
   }, [settings])
 
   const submit = async (e: React.FormEvent) => {
@@ -81,12 +73,8 @@ export function FileLimitsSection(props?: {
         }
       })
       onSaved(updated)
-      // 生效值以服务端返回为准回显
-      const eff =
-        updated.fileLimits.effectiveSingleMaxMB ??
-        Math.min(updated.fileLimits.defaultSingleMaxMB, 100)
       setDefaultQuotaMB(String(updated.fileLimits.defaultQuotaMB))
-      setDefaultSingleMaxMB(String(eff))
+      setDefaultSingleMaxMB(String(updated.fileLimits.defaultSingleMaxMB))
       toast.success(t("admin.limits.saved"))
     } catch (saveError) {
       const msg = describeApiError(t, saveError)
@@ -99,15 +87,9 @@ export function FileLimitsSection(props?: {
 
   if (!settings) return null
 
-  const effectiveSingle =
-    settings.fileLimits.effectiveSingleMaxMB ??
-    Math.min(settings.fileLimits.defaultSingleMaxMB, 100)
-  const configuredSingle = settings.fileLimits.defaultSingleMaxMB
-  const isCapped = configuredSingle > effectiveSingle
-
   const isDirty =
     defaultQuotaMB !== String(settings.fileLimits.defaultQuotaMB ?? 100) ||
-    defaultSingleMaxMB !== String(effectiveSingle)
+    defaultSingleMaxMB !== String(settings.fileLimits.defaultSingleMaxMB ?? 100)
 
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4">
@@ -157,18 +139,6 @@ export function FileLimitsSection(props?: {
             disabled={busy}
             required
           />
-          <p className="text-xs text-muted-foreground">
-            {t("admin.limits.effectiveSingleMaxHint", {
-              effective: effectiveSingle
-            })}
-            {isCapped ? (
-              <span className="text-amber-600 dark:text-amber-400 font-medium ml-1">
-                {t("admin.limits.hardCapCapped", {
-                  configured: configuredSingle
-                })}
-              </span>
-            ) : null}
-          </p>
         </div>
 
         <Button type="submit" size="sm" disabled={busy}>

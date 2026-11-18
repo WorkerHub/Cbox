@@ -34,6 +34,10 @@ import type {
   SetupState,
   ShareItem,
   TwoFactorMethod,
+  UploadCompletedPart,
+  UploadCompleteInput,
+  UploadInitResponse,
+  UploadPartUrlsResponse,
   UsageInfo,
   UserLimitsResponse,
   UserLimitsUpdateInput
@@ -371,83 +375,316 @@ export const foldersApi = {
     })
 }
 
+export interface UploadProgress {
+  loaded: number
+  total: number
+  percent: number
+}
+
 export interface UploadFileOptions {
   folderId?: string | null
   expiresIn?: string | null
   sha256?: string | null
+  signal?: AbortSignal
+  onUploadIdCreated?: (uploadId: string) => void
 }
 
-export const filesApi = {
-  upload: (
-    file: File,
-    options?: UploadFileOptions,
-    onProgress?: (percent: number) => void
-  ): Promise<FileItem> => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open("POST", `${BASE}/files`)
-      xhr.withCredentials = true
+function uploadChunkWithProgress(
+  url: string,
+  chunk: Blob,
+  contentType?: string,
+  signal?: AbortSignal,
+  onProgress?: (loaded: number) => void
+): Promise<{ etag: string }> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("The user aborted a request.", "AbortError"))
+      return
+    }
 
-      if (xhr.upload && onProgress) {
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable && event.total > 0) {
-            const percent = Math.min(
-              100,
-              Math.max(0, Math.round((event.loaded / event.total) * 100))
-            )
-            onProgress(percent)
-          }
+    let settled = false
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      xhr.abort()
+      reject(new DOMException("The user aborted a request.", "AbortError"))
+    }
+
+    const cleanup = () => {
+      if (signal) {
+        signal.removeEventListener("abort", onAbort)
+      }
+    }
+
+    const xhr = new XMLHttpRequest()
+    xhr.open("PUT", url)
+    if (contentType) {
+      xhr.setRequestHeader("Content-Type", contentType)
+    }
+
+    if (xhr.upload && onProgress) {
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          onProgress(event.loaded)
         }
       }
+    }
 
-      xhr.onload = () => {
-        let envelope: ErrorEnvelope = {}
-        try {
-          envelope = JSON.parse(xhr.responseText || "{}") as ErrorEnvelope
-        } catch {
-          // ignore json parse error
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true })
+    }
+
+    xhr.onload = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (xhr.status >= 200 && xhr.status < 300) {
+        let etag = xhr.getResponseHeader("ETag") ?? ""
+        if (etag.startsWith('"') && etag.endsWith('"')) {
+          etag = etag.slice(1, -1)
         }
-
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(envelope as unknown as FileItem)
-          return
-        }
-
-        if (xhr.status === 401) {
-          void import("@/stores/auth").then(({ useAuthStore }) => {
-            useAuthStore.setState({ user: null, status: "ready" })
-          })
-        }
-
+        resolve({ etag })
+      } else {
         reject(
           new ApiError({
             status: xhr.status,
-            message: envelope.error ?? xhr.statusText,
-            code: envelope.code,
-            retryAfter: envelope.retryAfter,
-            detail: envelope.detail
+            message: `Upload failed: ${xhr.statusText || xhr.status}`
           })
         )
       }
+    }
 
-      xhr.onerror = () => {
-        reject(new ApiError({ status: 0, message: "Network error" }))
-      }
+    xhr.onerror = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new ApiError({ status: 0, message: "Network error during upload" }))
+    }
 
-      const formData = new FormData()
-      formData.append("file", file)
-      if (options?.folderId) {
-        formData.append("folderId", options.folderId)
-      }
-      if (options?.expiresIn) {
-        formData.append("expiresIn", options.expiresIn)
-      }
-      if (options?.sha256) {
-        formData.append("sha256", options.sha256)
-      }
+    xhr.onabort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new DOMException("The user aborted a request.", "AbortError"))
+    }
 
-      xhr.send(formData)
+    xhr.send(chunk)
+  })
+}
+
+async function uploadPartWithRetry(
+  url: string,
+  chunk: Blob,
+  contentType?: string,
+  signal?: AbortSignal,
+  onProgress?: (loaded: number) => void,
+  maxRetries = 3
+): Promise<{ etag: string }> {
+  let attempt = 0
+  while (true) {
+    if (signal?.aborted) {
+      throw new DOMException("The user aborted a request.", "AbortError")
+    }
+    try {
+      return await uploadChunkWithProgress(
+        url,
+        chunk,
+        contentType,
+        signal,
+        onProgress
+      )
+    } catch (err: unknown) {
+      if (
+        signal?.aborted ||
+        (err instanceof DOMException && err.name === "AbortError")
+      ) {
+        throw err
+      }
+      attempt++
+      if (attempt >= maxRetries) {
+        throw err
+      }
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+}
+
+export const filesApi = {
+  initUpload: (input: {
+    name: string
+    filename?: string
+    sizeBytes: number
+    declaredSizeBytes?: number
+    contentType?: string
+    folderId?: string | null
+    expiresIn?: string | null
+  }) =>
+    request<UploadInitResponse>("/files/uploads/init", {
+      method: "POST",
+      body: {
+        name: input.name,
+        filename: input.filename ?? input.name,
+        sizeBytes: input.sizeBytes,
+        declaredSizeBytes: input.declaredSizeBytes ?? input.sizeBytes,
+        contentType: input.contentType,
+        folderId: input.folderId,
+        expiresIn: input.expiresIn
+      }
+    }),
+
+  getUploadPartUrls: (id: string, partNumbers: number[]) =>
+    request<UploadPartUrlsResponse>(
+      `/files/uploads/${encodeURIComponent(id)}/part-urls`,
+      {
+        method: "POST",
+        body: { partNumbers }
+      }
+    ),
+
+  completeUpload: (id: string, body: UploadCompleteInput) =>
+    request<FileItem>(`/files/uploads/${encodeURIComponent(id)}/complete`, {
+      method: "POST",
+      body
+    }),
+
+  abortUpload: (id: string) =>
+    request<{ success: true }>(`/files/uploads/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    }),
+
+  upload: async (
+    file: File,
+    options?: UploadFileOptions,
+    onProgress?: (progress: UploadProgress) => void
+  ): Promise<FileItem> => {
+    const signal = options?.signal
+    if (signal?.aborted) {
+      throw new DOMException("The user aborted a request.", "AbortError")
+    }
+
+    const contentType = file.type || "application/octet-stream"
+
+    const initRes = await filesApi.initUpload({
+      name: file.name,
+      filename: file.name,
+      sizeBytes: file.size,
+      declaredSizeBytes: file.size,
+      contentType,
+      folderId: options?.folderId,
+      expiresIn: options?.expiresIn
     })
+
+    const uploadId = initRes.uploadId
+    options?.onUploadIdCreated?.(uploadId)
+
+    if (initRes.mode === "single") {
+      try {
+        await uploadPartWithRetry(
+          initRes.url,
+          file,
+          contentType,
+          signal,
+          (loaded) => {
+            const total = file.size
+            const percent =
+              total > 0
+                ? Math.min(100, Math.round((loaded / total) * 100))
+                : 100
+            onProgress?.({ loaded, total, percent })
+          },
+          3
+        )
+      } catch (err) {
+        try {
+          await filesApi.abortUpload(uploadId)
+        } catch {
+          // ignore abort error
+        }
+        throw err
+      }
+
+      return await filesApi.completeUpload(uploadId, {
+        sha256: options?.sha256
+      })
+    }
+
+    const partSize = initRes.partSize
+    const totalParts = Math.max(1, Math.ceil(file.size / partSize))
+    const parts: UploadCompletedPart[] = []
+    const partBytesLoaded = new Array<number>(totalParts).fill(0)
+
+    const reportProgress = () => {
+      const loaded = partBytesLoaded.reduce((acc, curr) => acc + curr, 0)
+      const total = file.size
+      const percent =
+        total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100
+      onProgress?.({ loaded, total, percent })
+    }
+
+    try {
+      const partNumberBatches: number[][] = []
+      for (let i = 1; i <= totalParts; i += 50) {
+        const batch: number[] = []
+        for (let j = i; j < i + 50 && j <= totalParts; j++) {
+          batch.push(j)
+        }
+        partNumberBatches.push(batch)
+      }
+
+      const partUrlMap = new Map<number, string>()
+      for (const batch of partNumberBatches) {
+        if (signal?.aborted) {
+          throw new DOMException("The user aborted a request.", "AbortError")
+        }
+        const res = await filesApi.getUploadPartUrls(uploadId, batch)
+        for (const item of res.parts) {
+          partUrlMap.set(item.partNumber, item.url)
+        }
+      }
+
+      for (let partNumber = 1; partNumber <= totalParts; partNumber++) {
+        if (signal?.aborted) {
+          throw new DOMException("The user aborted a request.", "AbortError")
+        }
+        const url = partUrlMap.get(partNumber)
+        if (!url) {
+          throw new Error(`Missing upload URL for part ${partNumber}`)
+        }
+        const start = (partNumber - 1) * partSize
+        const end = Math.min(start + partSize, file.size)
+        const chunk = file.slice(start, end)
+
+        const { etag } = await uploadPartWithRetry(
+          url,
+          chunk,
+          undefined,
+          signal,
+          (loaded) => {
+            partBytesLoaded[partNumber - 1] = loaded
+            reportProgress()
+          },
+          3
+        )
+
+        partBytesLoaded[partNumber - 1] = chunk.size
+        reportProgress()
+
+        parts.push({ partNumber, etag })
+      }
+
+      return await filesApi.completeUpload(uploadId, {
+        sha256: options?.sha256,
+        parts
+      })
+    } catch (err) {
+      try {
+        await filesApi.abortUpload(uploadId)
+      } catch {
+        // ignore abort error
+      }
+      throw err
+    }
   },
 
   patchExpiration: (id: string, expiresIn?: string | null) =>

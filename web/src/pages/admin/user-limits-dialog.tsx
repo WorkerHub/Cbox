@@ -147,10 +147,7 @@ export function UserLimitsDialog({
   }
 
   const globalQuota = globalLimits?.defaultQuotaMB ?? 100
-  const globalSingle =
-    globalLimits?.effectiveSingleMaxMB ??
-    globalLimits?.defaultSingleMaxMB ??
-    100
+  const globalSingle = globalLimits?.defaultSingleMaxMB ?? 100
 
   return (
     <Dialog open={user !== null} onOpenChange={(open) => !open && onClose()}>

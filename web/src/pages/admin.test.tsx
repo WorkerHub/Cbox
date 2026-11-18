@@ -705,7 +705,7 @@ describe("用户管理操作列", () => {
 })
 
 describe("全局文件限额", () => {
-  it("修改全局文件限额并保存，生效值以服务端返回为准回显", async () => {
+  it("修改全局文件限额并保存，无平台硬顶钳制", async () => {
     const user = userEvent.setup()
     vi.mocked(adminApi.settings).mockResolvedValue(adminSettings())
     vi.mocked(adminApi.updateSettings).mockResolvedValue(
@@ -714,10 +714,7 @@ describe("全局文件限额", () => {
           defaultQuotaBytes: 209715200,
           defaultSingleMaxBytes: 524288000,
           defaultQuotaMB: 200,
-          defaultSingleMaxMB: 500,
-          effectiveSingleMaxBytes: 104857600,
-          effectiveSingleMaxMB: 100,
-          platformHardCapMB: 100
+          defaultSingleMaxMB: 500
         }
       })
     )
@@ -747,9 +744,9 @@ describe("全局文件限额", () => {
       })
     )
 
-    // 验证回显生效值为 100 MB（而非输入值 500 MB），并展示硬顶受限标注
-    expect(singleInput).toHaveValue(100)
-    expect(screen.getByText(/受平台硬顶 100 MB 限制/)).toBeInTheDocument()
+    // 验证回显值 500 MB，不再受平台硬顶钳制
+    expect(singleInput).toHaveValue(500)
+    expect(screen.queryByText(/受平台硬顶/)).not.toBeInTheDocument()
   })
 
   it("非法限额输入阻止提交并提示错误", async () => {
