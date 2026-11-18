@@ -157,63 +157,134 @@ fileRoutes.post("/", async (c) => {
   const r2Key = `u${userId}/${fileId}`
 
   let bytesWritten = 0
-  const limitFailureRef: { current: LimitValidationResult | null } = {
-    current: null
-  }
 
-  const countingStream = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      bytesWritten += chunk.byteLength
-      const check = validateUploadLimits(limits, currentUsage, bytesWritten)
-      if (!check.ok) {
-        limitFailureRef.current = check
-        controller.error(new Error(check.code))
-        return
+  if (announcedSize === null) {
+    // 无 Content-Length 的未知长度流式上传（如 chunked）：
+    // 边读 chunk 边累计限额判定，超限即时中止并返回 413，绝不落 R2 与 D1。
+    const reader = inputStream.getReader()
+    const chunks: Uint8Array[] = []
+    let readBytes = 0
+
+    try {
+      while (true) {
+        const { done, value: chunk } = await reader.read()
+        if (done) break
+        if (chunk && chunk.byteLength > 0) {
+          readBytes += chunk.byteLength
+          const check = validateUploadLimits(limits, currentUsage, readBytes)
+          if (!check.ok) {
+            await reader.cancel().catch(() => {})
+            return apiError(c, 413, check.code, check.error, {
+              limitBytes: check.limitBytes
+            })
+          }
+          chunks.push(chunk)
+        }
       }
-      controller.enqueue(chunk)
+    } catch (err) {
+      await reader.cancel().catch(() => {})
+      console.error("Chunked stream read error:", err)
+      return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
     }
-  })
 
-  try {
-    let uploadStream: ReadableStream<Uint8Array> =
-      inputStream.pipeThrough(countingStream)
-    const FLS = (
-      globalThis as unknown as {
-        FixedLengthStream?: new (len: number) => TransformStream
-      }
-    ).FixedLengthStream
-    if (announcedSize !== null && typeof FLS === "function") {
-      const fls = new FLS(announcedSize)
-      uploadStream.pipeTo(fls.writable).catch(() => {})
-      uploadStream = fls.readable
-    }
+    bytesWritten = readBytes
 
-    await c.env.FILES.put(r2Key, uploadStream, {
-      httpMetadata: {
-        contentType: fileContentType
-      }
-    })
-  } catch (err) {
-    // 写入失败或超限中止：立即删除 R2 对象，绝不落元数据（规格 §5.2）
-    await c.env.FILES.delete(r2Key)
-    const failure = limitFailureRef.current
-    if (failure && !failure.ok) {
-      return apiError(c, 413, failure.code, failure.error, {
-        limitBytes: failure.limitBytes
+    // 5. 写入前并发竞态复查（规格 §4）
+    const recheckedUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
+    const finalCheck = validateUploadLimits(
+      limits,
+      recheckedUsage,
+      bytesWritten
+    )
+    if (!finalCheck.ok) {
+      return apiError(c, 413, finalCheck.code, finalCheck.error, {
+        limitBytes: finalCheck.limitBytes
       })
     }
-    console.error("R2 stream write error:", err)
-    return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
-  }
 
-  // 5. 写入成功后的并发竞态复查
-  const recheckedUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
-  const finalCheck = validateUploadLimits(limits, recheckedUsage, bytesWritten)
-  if (!finalCheck.ok) {
-    await c.env.FILES.delete(r2Key)
-    return apiError(c, 413, finalCheck.code, finalCheck.error, {
-      limitBytes: finalCheck.limitBytes
+    // 拼装完整 buffer 写入 R2（长度已知，杜绝 R2 对未知长度流抛 TypeError）
+    const fullBuffer = new Uint8Array(bytesWritten)
+    let offset = 0
+    for (const chunk of chunks) {
+      fullBuffer.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+
+    try {
+      await c.env.FILES.put(r2Key, fullBuffer, {
+        httpMetadata: {
+          contentType: fileContentType
+        }
+      })
+    } catch (err) {
+      await c.env.FILES.delete(r2Key)
+      console.error("R2 write error:", err)
+      return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
+    }
+  } else {
+    // 已知长度流式上传（multipart 或带 Content-Length 的裸流）：保持零缓冲流式传输
+    const limitFailureRef: { current: LimitValidationResult | null } = {
+      current: null
+    }
+
+    const countingStream = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        bytesWritten += chunk.byteLength
+        const check = validateUploadLimits(limits, currentUsage, bytesWritten)
+        if (!check.ok) {
+          limitFailureRef.current = check
+          controller.error(new Error(check.code))
+          return
+        }
+        controller.enqueue(chunk)
+      }
     })
+
+    try {
+      let uploadStream: ReadableStream<Uint8Array> =
+        inputStream.pipeThrough(countingStream)
+      const FLS = (
+        globalThis as unknown as {
+          FixedLengthStream?: new (len: number) => TransformStream
+        }
+      ).FixedLengthStream
+      if (typeof FLS === "function") {
+        const fls = new FLS(announcedSize)
+        uploadStream.pipeTo(fls.writable).catch(() => {})
+        uploadStream = fls.readable
+      }
+
+      await c.env.FILES.put(r2Key, uploadStream, {
+        httpMetadata: {
+          contentType: fileContentType
+        }
+      })
+    } catch (err) {
+      // 写入失败或超限中止：立即删除 R2 对象，绝不落元数据（规格 §5.2）
+      await c.env.FILES.delete(r2Key)
+      const failure = limitFailureRef.current
+      if (failure && !failure.ok) {
+        return apiError(c, 413, failure.code, failure.error, {
+          limitBytes: failure.limitBytes
+        })
+      }
+      console.error("R2 stream write error:", err)
+      return apiError(c, 500, "UPLOAD_FAILED", "Failed to upload file")
+    }
+
+    // 5. 写入成功后的并发竞态复查
+    const recheckedUsage = await getUserUsageBytes(c.env.DB, prefix, userId)
+    const finalCheck = validateUploadLimits(
+      limits,
+      recheckedUsage,
+      bytesWritten
+    )
+    if (!finalCheck.ok) {
+      await c.env.FILES.delete(r2Key)
+      return apiError(c, 413, finalCheck.code, finalCheck.error, {
+        limitBytes: finalCheck.limitBytes
+      })
+    }
   }
 
   // 6. 落 D1 元数据

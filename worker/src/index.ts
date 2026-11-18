@@ -93,7 +93,11 @@ app.route("/api/setup", setupRoutes)
 app.route("/_waker", wakerRoutes)
 
 // 公开免登分享直链（规格 §6、§10）：GET /s/:token，必须在 SPA 回落之前注册
+// 空 token（/s、/s/）与非法形态一律 404，不落 SPA 回落
+app.all("/s", (c) => c.text("Not found", 404))
+app.all("/s/", (c) => c.text("Not found", 404))
 app.get("/s/:token", handlePublicShareDownload)
+app.all("/s/*", (c) => c.text("Not found", 404))
 
 // PWA 安装清单（规格第 4 项）：由 Worker 从身份真源动态生成，名字零第二份字面量。
 // 必须在 SPA 回落 app.get("*") 之前注册；缓存口径与 /api/public 对齐。
