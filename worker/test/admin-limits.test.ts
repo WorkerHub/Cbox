@@ -16,7 +16,7 @@ describe("管理端：全局限额与单人覆盖（规格 §4、§7、§10）",
     await registerUser(env, { email: "owner@example.test" })
     const admin = await adminCookie(env)
 
-    // 1. 读取初始默认值：100 MB
+    // 1. 读取初始默认值：10 GiB / 2 GiB
     const getRes = await request(env, "/api/admin/settings", {
       headers: { cookie: admin }
     })
@@ -30,10 +30,10 @@ describe("管理端：全局限额与单人覆盖（规格 §4、§7、§10）",
       }
     }
     expect(settings.fileLimits).toMatchObject({
-      defaultQuotaMB: 100,
-      defaultSingleMaxMB: 100,
-      defaultQuotaBytes: 104857600,
-      defaultSingleMaxBytes: 104857600
+      defaultQuotaMB: 10240,
+      defaultSingleMaxMB: 2048,
+      defaultQuotaBytes: 10737418240,
+      defaultSingleMaxBytes: 2147483648
     })
 
     // 2. 修改全局限额为总容量 200 MB，单文件上限 10 MB
@@ -131,7 +131,7 @@ describe("管理端：全局限额与单人覆盖（规格 §4、§7、§10）",
       effectiveSingleMaxMB: 50
     })
 
-    // 清空覆盖（传 null）：即刻回落全局默认值（100 MB）
+    // 清空覆盖（传 null）：即刻回落全局默认值（10 GiB / 2 GiB）
     const clearRes = await request(
       env,
       `/api/admin/users/${member.id}/limits`,
@@ -153,7 +153,7 @@ describe("管理端：全局限额与单人覆盖（规格 §4、§7、§10）",
     }
     expect(clearBody.quotaMB).toBeNull()
     expect(clearBody.singleMaxMB).toBeNull()
-    expect(clearBody.effectiveQuotaMB).toBe(100)
-    expect(clearBody.effectiveSingleMaxMB).toBe(100)
+    expect(clearBody.effectiveQuotaMB).toBe(10240)
+    expect(clearBody.effectiveSingleMaxMB).toBe(2048)
   })
 })

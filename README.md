@@ -189,10 +189,12 @@ pnpm check:deploy   # 先 build:web，再 wrangler deploy --dry-run（不联网�
 | `CLOUDFLARE_ACCOUNT_ID` | 组织 secret   | 是   | Cloudflare 账户                                                        |
 | `D1_DATABASE_ID`        | 组织 secret   | 是   | 共享 D1 的库 ID                                                        |
 | `D1_DATABASE_NAME`      | 组织 variable | 是   | 共享 D1 的库名，替换 `wrangler.toml` 占位符                            |
+| `R2_ACCESS_KEY_ID`      | 组织 secret   | 是   | R2 S3 API 访问密钥 ID，上传为 Worker secret                            |
+| `R2_SECRET_ACCESS_KEY`  | 组织 secret   | 是   | R2 S3 API 密钥，上传为 Worker secret                                   |
 | `TABLE_PREFIX`          | variable      | 否   | 表前缀三态（见下）                                                     |
 | `WAKER_SIGNING_KEY`     | 仓库 secret   | 否   | waker 回调验签钥                                                       |
 
-- 舰队项目复用组织级 secret 与同一个共享 D1：不建仓库级同名项、不新建库；仓库级只加 `SETUP_SECRET` / `SIGNING_SECRET`（`WAKER_SIGNING_KEY` 按需）。
+- 舰队项目复用组织级 secret 与同一个共享 D1：不建仓库级同名项、不新建库；仓库级只加 `SETUP_SECRET` / `SIGNING_SECRET`（`WAKER_SIGNING_KEY` 按需）。`CLOUDFLARE_ACCOUNT_ID` 与 `R2_*` 凭证会同步上传为 Worker secret 以供运行时推导 S3 端点并完成 SigV4 预签名。
 - `tag.yml` 推 tag 还用到仓库 secret `PAT_TOKEN`（有 repo 写权限的 PAT）；不手动打 tag 的项目可以不配。
 - `SETUP_SECRET` 与 `SIGNING_SECRET` 在同一层级必填：`scripts/materialize-secrets.mjs` 逐项校验，缺任一把、为空或仍是占位值就退出 1 并点名，**不生成 secrets.json、也不改动 wrangler.toml**。
 - `TABLE_PREFIX` 三态：未配置 / 空 → 项目默认前缀（`worker/src/config/defaults.json`，运行时补尾下划线）；CI 保留字 `none` → 无前缀；其他值 → 校验后原样注入。生效前缀必须在初始化前定死，初始化后换前缀会被前缀冲突守卫拦下。

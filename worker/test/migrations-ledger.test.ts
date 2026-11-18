@@ -3,11 +3,16 @@
  * 顺带锁住硬约束：基线语句内部不得出现 `;`、表名一律由 tables.ts 拼装。
  */
 import { describe, expect, it } from "vitest"
-import { BASELINE_MIGRATION, getMigrations } from "../src/lib/migrations"
+import {
+  BASELINE_MIGRATION,
+  FILES_UPLOADS_MIGRATION,
+  getMigrations
+} from "../src/lib/migrations"
 import { splitStatements } from "../src/lib/migrations-runner"
 import { ledgerName, runSetup } from "../src/lib/setup"
 import {
   emailCodesTable,
+  filesTable,
   legacyMigrationsTable,
   migrationsTable,
   sessionsTable,
@@ -27,15 +32,15 @@ function columnNames(db: SqliteD1, table: string): string[] {
 }
 
 describe("迁移定义", () => {
-  it("单一基线 schema_v1，语句内部不含分号", () => {
+  it("单一基线 schema_v1 与直传增量迁移，语句内部不含分号", () => {
     const prefix = "wiki_"
     const migrations = getMigrations(prefix)
     expect(migrations.map((migration) => migration.name)).toEqual([
-      BASELINE_MIGRATION
+      BASELINE_MIGRATION,
+      FILES_UPLOADS_MIGRATION
     ])
     for (const migration of migrations) {
       const statements = splitStatements(migration.sql)
-      expect(statements.length).toBeGreaterThan(0)
       for (const statement of statements) {
         expect(statement).not.toContain(";")
       }
@@ -89,7 +94,8 @@ describe("账本命名", () => {
     expect(again.success).toBe(true)
     if (again.success) {
       expect(again.migrations).toEqual([
-        { name: BASELINE_MIGRATION, status: "skipped" }
+        { name: BASELINE_MIGRATION, status: "skipped" },
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" }
       ])
     }
   })
@@ -110,7 +116,8 @@ describe("旧账本改名承接", () => {
     expect(result.success).toBe(true)
     if (result.success) {
       expect(result.migrations).toEqual([
-        { name: BASELINE_MIGRATION, status: "skipped" }
+        { name: BASELINE_MIGRATION, status: "skipped" },
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" }
       ])
     }
 
@@ -121,7 +128,9 @@ describe("旧账本改名承接", () => {
     const rows = db.db
       .prepare(`SELECT name FROM ${migrationsTable(prefix)}`)
       .all() as Array<{ name: string }>
-    expect(rows.map((row) => row.name)).toEqual([BASELINE_MIGRATION])
+    expect(new Set(rows.map((row) => row.name))).toEqual(
+      new Set([BASELINE_MIGRATION, FILES_UPLOADS_MIGRATION])
+    )
   })
 
   it("新旧账本同存 → 409 LEDGER_CONFLICT，一个表都不动", async () => {
@@ -169,15 +178,16 @@ describe("旧账本改名承接", () => {
   })
 })
 
-describe("生产库只读识别兼容（存量已应用 v1..v6）", () => {
-  it("生产库已有 schema_v1..schema_v6 记录：识别为已最新（skipped），零写生产库、既有账号在", async () => {
+describe("生产库增量升级与兼容（存量已应用 v1..v6）", () => {
+  it("生产库已有 schema_v1..schema_v6 记录：基线 skipped，增量 files_uploads_v1 applied，存量数据保留", async () => {
     const { env, db } = await initializedContext()
     const prefix = activePrefix(env)
     const ledger = migrationsTable(prefix)
     const users = usersTable(prefix)
+    const files = filesTable(prefix)
     const now = new Date().toISOString()
 
-    // 模拟生产库状态：账本拥有历史 v1..v6 应用记录
+    // 模拟生产库状态：账本拥有历史 v1..v6 应用记录（尚未应用 files_uploads_v1）
     const legacyRecords = [
       "schema_v1",
       "schema_v2",
@@ -203,29 +213,26 @@ describe("生产库只读识别兼容（存量已应用 v1..v6）", () => {
       )
       .run("prod-admin@example.test", now, now)
 
-    const beforeLedgerRows = db.db
-      .prepare(
-        `SELECT name, applied_at FROM ${ledger} ORDER BY applied_at, name`
-      )
-      .all() as Array<{ name: string; applied_at: number }>
+    // 模拟存量 files 表如果缺少 status / upload_id 列
+    db.db.exec(`ALTER TABLE ${files} DROP COLUMN status`)
+    db.db.exec(`ALTER TABLE ${files} DROP COLUMN upload_id`)
+    expect(columnNames(db, files)).not.toContain("status")
+    expect(columnNames(db, files)).not.toContain("upload_id")
 
     // 执行 setup / 数据库维护升级
     const result = await runSetup(env)
     expect(result.success).toBe(true)
     if (result.success) {
-      // 必须被只读识别为已最新，仅包含单一 V1 且状态为 skipped
+      // 基线 schema_v1 被识别为 skipped，增量 files_uploads_v1 成功 applied
       expect(result.migrations).toEqual([
-        { name: BASELINE_MIGRATION, status: "skipped" }
+        { name: BASELINE_MIGRATION, status: "skipped" },
+        { name: FILES_UPLOADS_MIGRATION, status: "applied" }
       ])
     }
 
-    // 零写生产库：账本行数与原记录完全一致，未插入任何新行
-    const afterLedgerRows = db.db
-      .prepare(
-        `SELECT name, applied_at FROM ${ledger} ORDER BY applied_at, name`
-      )
-      .all() as Array<{ name: string; applied_at: number }>
-    expect(afterLedgerRows).toEqual(beforeLedgerRows)
+    // 校验 files 表成功补全两列
+    expect(columnNames(db, files)).toContain("status")
+    expect(columnNames(db, files)).toContain("upload_id")
 
     // 既有测试账号完整保留
     const userRow = db.db
@@ -239,10 +246,28 @@ describe("生产库只读识别兼容（存量已应用 v1..v6）", () => {
       role: "admin",
       status: "active"
     })
+
+    // 再次执行 setup：两项迁移均 skipped（幂等）
+    const secondResult = await runSetup(env)
+    expect(secondResult.success).toBe(true)
+    if (secondResult.success) {
+      expect(secondResult.migrations).toEqual([
+        { name: BASELINE_MIGRATION, status: "skipped" },
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" }
+      ])
+    }
   })
 })
 
 describe("单一 V1 终态表结构验证（全新安装）", () => {
+  it("files 表：包含 status 与 upload_id 列", async () => {
+    const { env, db } = await initializedContext()
+    const prefix = activePrefix(env)
+    const columns = columnNames(db, filesTable(prefix))
+    expect(columns).toContain("status")
+    expect(columns).toContain("upload_id")
+  })
+
   it("users 表：无 username、无 theme、有 must_change_password", async () => {
     const { env, db } = await initializedContext()
     const prefix = activePrefix(env)

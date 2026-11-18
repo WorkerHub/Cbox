@@ -51,7 +51,10 @@ describe("setup：初始化与回显", () => {
     expect(await res.json()).toEqual({
       success: true,
       tablePrefix: prefix,
-      migrations: [{ name: "schema_v1", status: "applied" }]
+      migrations: [
+        { name: "schema_v1", status: "applied" },
+        { name: "files_uploads_v1", status: "applied" }
+      ]
     })
 
     const tables = tableNames(db)
@@ -100,7 +103,10 @@ describe("setup：初始化与回显", () => {
     const body = (await res.json()) as {
       migrations: Array<{ name: string; status: string }>
     }
-    expect(body.migrations).toEqual([{ name: "schema_v1", status: "skipped" }])
+    expect(body.migrations).toEqual([
+      { name: "schema_v1", status: "skipped" },
+      { name: "files_uploads_v1", status: "skipped" }
+    ])
     expect(readSetting(db, prefix, "setup_page_enabled")).toBe("1")
   })
 
@@ -399,7 +405,10 @@ describe("管理面数据库维护（POST /api/admin/setup）", () => {
     expect(adminBody).toEqual({
       success: true,
       tablePrefix: adminPrefix,
-      migrations: [{ name: "schema_v1", status: "skipped" }]
+      migrations: [
+        { name: "schema_v1", status: "skipped" },
+        { name: "files_uploads_v1", status: "skipped" }
+      ]
     })
   })
 

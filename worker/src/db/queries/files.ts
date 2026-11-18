@@ -106,7 +106,7 @@ export async function findFileById(
       `SELECT id, user_id, folder_id, name, size_bytes, content_type,
               sha256, r2_key, expires_at, created_at
          FROM ${filesTable(prefix)}
-        WHERE id = ? AND user_id = ?`
+        WHERE id = ? AND user_id = ? AND status = 'active'`
     )
     .bind(fileId, userId)
     .first<FileRow>()
@@ -125,7 +125,7 @@ export async function listFiles(
             `SELECT id, user_id, folder_id, name, size_bytes, content_type,
                     sha256, r2_key, expires_at, created_at
                FROM ${filesTable(prefix)}
-              WHERE user_id = ? AND folder_id IS NULL
+              WHERE user_id = ? AND folder_id IS NULL AND status = 'active'
               ORDER BY name COLLATE NOCASE ASC`
           )
           .bind(userId)
@@ -134,7 +134,7 @@ export async function listFiles(
             `SELECT id, user_id, folder_id, name, size_bytes, content_type,
                     sha256, r2_key, expires_at, created_at
                FROM ${filesTable(prefix)}
-              WHERE user_id = ? AND folder_id = ?
+              WHERE user_id = ? AND folder_id = ? AND status = 'active'
               ORDER BY name COLLATE NOCASE ASC`
           )
           .bind(userId, folderId)

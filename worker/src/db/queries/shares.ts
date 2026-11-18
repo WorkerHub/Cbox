@@ -57,7 +57,7 @@ export async function createShareRecord(
     .prepare(
       `SELECT id, user_id, expires_at
          FROM ${filesTable(prefix)}
-        WHERE id = ? AND user_id = ?`
+        WHERE id = ? AND user_id = ? AND status = 'active'`
     )
     .bind(fileId, userId)
     .first<{ id: string; user_id: number; expires_at: string | null }>()
@@ -178,7 +178,7 @@ export async function findActiveShareByToken(
               f.expires_at AS file_expires_at
          FROM ${sharesTable(prefix)} s
          JOIN ${filesTable(prefix)} f ON s.file_id = f.id
-        WHERE s.token_hash = ?`
+        WHERE s.token_hash = ? AND f.status = 'active'`
     )
     .bind(tokenHash)
     .first<{

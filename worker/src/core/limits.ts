@@ -1,8 +1,7 @@
 import { filesTable, settingsTable, userLimitsTable } from "../lib/tables"
 
-export const DEFAULT_FILE_QUOTA_BYTES = 104857600 // 100 MiB
-export const DEFAULT_FILE_SINGLE_MAX_BYTES = 104857600 // 100 MiB
-export const PLATFORM_HARD_CAP_BYTES = 104857600 // 100 MiB (Cloudflare request body cap)
+export const DEFAULT_FILE_QUOTA_BYTES = 10737418240 // 10 GiB (10240 MiB)
+export const DEFAULT_FILE_SINGLE_MAX_BYTES = 2147483648 // 2 GiB (2048 MiB)
 export const BYTES_PER_MB = 1048576
 export const MAX_LIMIT_MB = 1048576 // 1 TiB
 
@@ -76,11 +75,7 @@ export async function resolveUserLimits(
       : null
 
   const effectiveQuotaBytes = userQuotaBytes ?? globalQuotaBytes
-  const rawSingleMaxBytes = userSingleMaxBytes ?? globalSingleMaxBytes
-  const effectiveSingleMaxBytes = Math.min(
-    rawSingleMaxBytes,
-    PLATFORM_HARD_CAP_BYTES
-  )
+  const effectiveSingleMaxBytes = userSingleMaxBytes ?? globalSingleMaxBytes
 
   return {
     globalQuotaBytes,

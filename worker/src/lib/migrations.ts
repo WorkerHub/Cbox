@@ -27,6 +27,8 @@ export interface Migration {
 
 /** 唯一基线迁移名（坍缩为单一 V1）。 */
 export const BASELINE_MIGRATION = "schema_v1"
+/** 直传上传增量迁移（为 files 表补充 status 与 upload_id 列）。 */
+export const FILES_UPLOADS_MIGRATION = "files_uploads_v1"
 
 export function getMigrations(prefix: string): Migration[] {
   const statements = baselineStatements(prefix)
@@ -48,5 +50,30 @@ export function getMigrations(prefix: string): Migration[] {
     }
   }
 
-  return [{ name: BASELINE_MIGRATION, sql }]
+  return [
+    { name: BASELINE_MIGRATION, sql },
+    {
+      name: FILES_UPLOADS_MIGRATION,
+      sql: "",
+      prepare: async (ctx) => {
+        const t = tableName(ctx.prefix, "files")
+        const cols = await ctx.db
+          .prepare(`PRAGMA table_info(${t})`)
+          .all<{ name: string }>()
+        const has = (n: string) => cols.results.some((c) => c.name === n)
+        if (!has("status")) {
+          await ctx.db
+            .prepare(
+              `ALTER TABLE ${t} ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`
+            )
+            .run()
+        }
+        if (!has("upload_id")) {
+          await ctx.db
+            .prepare(`ALTER TABLE ${t} ADD COLUMN upload_id TEXT`)
+            .run()
+        }
+      }
+    }
+  ]
 }

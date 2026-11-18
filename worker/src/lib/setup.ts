@@ -55,8 +55,8 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   email_provider: "none",
   smtp_config: "{}",
   resend_config: "{}",
-  file_quota_default_bytes: "104857600",
-  file_single_max_default_bytes: "104857600"
+  file_quota_default_bytes: "10737418240",
+  file_single_max_default_bytes: "2147483648"
 }
 
 /**

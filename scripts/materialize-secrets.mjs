@@ -36,11 +36,19 @@ const REQUIRED = [
   ["CLOUDFLARE_API_TOKEN", "organization secret"],
   ["CLOUDFLARE_ACCOUNT_ID", "organization secret"],
   ["D1_DATABASE_ID", "organization secret"],
-  ["D1_DATABASE_NAME", "organization variable"]
+  ["D1_DATABASE_NAME", "organization variable"],
+  ["R2_ACCESS_KEY_ID", "organization secret"],
+  ["R2_SECRET_ACCESS_KEY", "organization secret"]
 ]
 
-/** 上传给 Worker 运行时的项：setup 令牌 + tempToken / 验证码签名钥。 */
-const SECRET_KEYS = ["SETUP_SECRET", "SIGNING_SECRET"]
+/** 上传给 Worker 运行时的项：setup 令牌 + tempToken / 验证码签名钥 + R2 凭据 + 账号 ID。 */
+const SECRET_KEYS = [
+  "SETUP_SECRET",
+  "SIGNING_SECRET",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
+  "CLOUDFLARE_ACCOUNT_ID"
+]
 
 /**
  * 可选项 `WAKER_SIGNING_KEY`：waker 回调的签名钥（规格 §5.5A 的三态开关）。

@@ -13,10 +13,14 @@ import { PROJECT_NAME } from "../../src/config/project"
 import type { Env } from "../../src/types"
 import { SqliteD1 } from "./sqlite-d1"
 import { MockR2Bucket } from "./mock-r2"
+import { createMockS3Fetch } from "./mock-s3"
 
 export const TEST_SETUP_SECRET = "test-setup-secret"
 export const TEST_SIGNING_SECRET = "signing-secret-for-unit-tests-only"
 export const TEST_APP_VERSION = "v1.0.0-7-abc1234"
+export const TEST_R2_ACCESS_KEY_ID = "test-r2-access-key-id"
+export const TEST_R2_SECRET_ACCESS_KEY = "test-r2-secret-access-key"
+export const TEST_CLOUDFLARE_ACCOUNT_ID = "test-cf-account-id"
 
 /** 静态资源替身：只要 `/` 回 HTML，其余 404（触发 SPA 回落的前半段）。 */
 function assets(): Fetcher {
@@ -44,6 +48,7 @@ export interface TestContext {
 export function makeContext(overrides: Partial<Env> = {}): TestContext {
   const db = new SqliteD1()
   const r2 = new MockR2Bucket()
+  const s3Fetch = createMockS3Fetch(r2)
   const env = {
     DB: db as unknown as D1Database,
     FILES: r2,
@@ -51,6 +56,10 @@ export function makeContext(overrides: Partial<Env> = {}): TestContext {
     SETUP_SECRET: TEST_SETUP_SECRET,
     SIGNING_SECRET: TEST_SIGNING_SECRET,
     APP_VERSION: TEST_APP_VERSION,
+    R2_ACCESS_KEY_ID: TEST_R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY: TEST_R2_SECRET_ACCESS_KEY,
+    CLOUDFLARE_ACCOUNT_ID: TEST_CLOUDFLARE_ACCOUNT_ID,
+    S3_FETCH: s3Fetch,
     ...overrides
   } as Env
   return { env, db, r2 }
@@ -400,4 +409,136 @@ export function codeFromEmail(email: SentEmail | undefined): string {
   const match = `${email?.text ?? ""}${email?.html ?? ""}`.match(/\d{6}/)
   if (!match) throw new Error("no 6-digit code in email")
   return match[0]
+}
+
+export interface DirectUploadOptions {
+  filename: string
+  content?: string | Uint8Array
+  declaredSizeBytes?: number
+  folderId?: string | null
+  expiresIn?: string | null
+  contentType?: string
+  sha256?: string
+  skipPut?: boolean
+}
+
+/**
+ * 测试辅助：模拟前端直传全流程（init → S3 put → complete）。
+ * 若 init / part-urls 失败则直接返回对应响应以便测试断言错误码。
+ */
+export async function directUpload(
+  env: Env,
+  cookie: string,
+  options: DirectUploadOptions
+): Promise<Response> {
+  const contentBytes =
+    options.content !== undefined
+      ? typeof options.content === "string"
+        ? new TextEncoder().encode(options.content)
+        : options.content
+      : new Uint8Array(0)
+
+  const declaredSizeBytes =
+    options.declaredSizeBytes !== undefined
+      ? options.declaredSizeBytes
+      : contentBytes.byteLength
+
+  // 1. POST /api/files/uploads/init
+  const initRes = await postJson(
+    env,
+    "/api/files/uploads/init",
+    {
+      filename: options.filename,
+      declaredSizeBytes,
+      folderId: options.folderId,
+      expiresIn: options.expiresIn,
+      contentType: options.contentType
+    },
+    { cookie }
+  )
+
+  if (initRes.status !== 201) {
+    return initRes
+  }
+
+  const initData = (await initRes.json()) as {
+    uploadId: string
+    mode: "single" | "multipart"
+    url?: string
+    partSize?: number
+  }
+
+  const doFetch = env.S3_FETCH ?? fetch
+
+  if (initData.mode === "single") {
+    if (!options.skipPut && initData.url) {
+      await doFetch(initData.url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": options.contentType || "application/octet-stream"
+        },
+        body: contentBytes
+      })
+    }
+
+    return await postJson(
+      env,
+      `/api/files/uploads/${initData.uploadId}/complete`,
+      {
+        sha256: options.sha256
+      },
+      { cookie }
+    )
+  } else {
+    // multipart
+    const partSize = initData.partSize ?? 10 * 1024 * 1024
+    const totalParts = Math.max(
+      1,
+      Math.ceil(contentBytes.byteLength / partSize)
+    )
+    const partNumbers = Array.from({ length: totalParts }, (_, i) => i + 1)
+
+    const partUrlsRes = await postJson(
+      env,
+      `/api/files/uploads/${initData.uploadId}/part-urls`,
+      { partNumbers },
+      { cookie }
+    )
+    if (partUrlsRes.status !== 200) {
+      return partUrlsRes
+    }
+
+    const { parts } = (await partUrlsRes.json()) as {
+      parts: Array<{ partNumber: number; url: string }>
+    }
+
+    const completedParts: Array<{ partNumber: number; etag: string }> = []
+
+    if (!options.skipPut) {
+      for (const p of parts) {
+        const start = (p.partNumber - 1) * partSize
+        const end = Math.min(start + partSize, contentBytes.byteLength)
+        const chunk = contentBytes.slice(start, end)
+        const putRes = await doFetch(p.url, {
+          method: "PUT",
+          body: chunk
+        })
+        const etag = putRes.headers.get("ETag") || `"mock-etag-${p.partNumber}"`
+        completedParts.push({
+          partNumber: p.partNumber,
+          etag
+        })
+      }
+    }
+
+    return await postJson(
+      env,
+      `/api/files/uploads/${initData.uploadId}/complete`,
+      {
+        parts: completedParts,
+        sha256: options.sha256
+      },
+      { cookie }
+    )
+  }
 }
