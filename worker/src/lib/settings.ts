@@ -18,6 +18,7 @@ import {
   DEFAULT_FILE_QUOTA_BYTES,
   DEFAULT_FILE_SINGLE_MAX_BYTES,
   MAX_LIMIT_MB,
+  PLATFORM_HARD_CAP_BYTES,
   bytesToMB,
   mbToBytes
 } from "../core/limits"
@@ -187,6 +188,9 @@ export interface FileLimitSettings {
   defaultSingleMaxBytes: number
   defaultQuotaMB: number
   defaultSingleMaxMB: number
+  effectiveSingleMaxBytes: number
+  effectiveSingleMaxMB: number
+  platformHardCapMB: number
 }
 
 export interface FileLimitSettingsPatch {
@@ -217,11 +221,19 @@ export async function readFileLimitSettings(
       ? Number(singleMaxStr)
       : DEFAULT_FILE_SINGLE_MAX_BYTES
 
+  const effectiveSingleMaxBytes = Math.min(
+    defaultSingleMaxBytes,
+    PLATFORM_HARD_CAP_BYTES
+  )
+
   return {
     defaultQuotaBytes,
     defaultSingleMaxBytes,
     defaultQuotaMB: bytesToMB(defaultQuotaBytes),
-    defaultSingleMaxMB: bytesToMB(defaultSingleMaxBytes)
+    defaultSingleMaxMB: bytesToMB(defaultSingleMaxBytes),
+    effectiveSingleMaxBytes,
+    effectiveSingleMaxMB: bytesToMB(effectiveSingleMaxBytes),
+    platformHardCapMB: bytesToMB(PLATFORM_HARD_CAP_BYTES)
   }
 }
 

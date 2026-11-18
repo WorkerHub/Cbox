@@ -119,6 +119,16 @@ export interface RegistrationSettings {
   emailVerification: boolean
 }
 
+export interface FileLimitSettings {
+  defaultQuotaBytes: number
+  defaultSingleMaxBytes: number
+  defaultQuotaMB: number
+  defaultSingleMaxMB: number
+  effectiveSingleMaxBytes?: number
+  effectiveSingleMaxMB?: number
+  platformHardCapMB?: number
+}
+
 export interface AdminSettings {
   /** 单人档不涉及注册：整个段为 null，页面据此隐藏。 */
   registration: RegistrationSettings | null
@@ -128,6 +138,7 @@ export interface AdminSettings {
   setupPageEnabled: boolean
   tablePrefix: string
   email: EmailSettings
+  fileLimits: FileLimitSettings
 }
 
 export interface SmtpUpdateInput {
@@ -158,6 +169,21 @@ export interface AdminSettingsUpdate {
     smtp: SmtpUpdateInput
     resend: ResendUpdateInput
   }
+  fileLimits?: {
+    defaultQuotaMB?: number
+    defaultSingleMaxMB?: number
+  }
+}
+
+export interface UserLimitsSummary {
+  quotaBytes: number | null
+  singleMaxBytes: number | null
+  quotaMB: number | null
+  singleMaxMB: number | null
+  effectiveQuotaBytes: number
+  effectiveSingleMaxBytes: number
+  effectiveQuotaMB: number
+  effectiveSingleMaxMB: number
 }
 
 /** GET /api/admin/users 列表项：全量用户（`?status=pending` 时为其中待批准子集）。 */
@@ -169,6 +195,16 @@ export interface AdminUser {
   status: "active" | "pending" | "disabled"
   emailVerified: boolean
   createdAt: string
+  limits?: UserLimitsSummary
+}
+
+export interface UserLimitsResponse extends UserLimitsSummary {
+  userId: number
+}
+
+export interface UserLimitsUpdateInput {
+  quotaMB?: number | null | ""
+  singleMaxMB?: number | null | ""
 }
 
 /** POST /api/admin/users：管理员手动新建用户（后端生成一次性初始密码）。 */

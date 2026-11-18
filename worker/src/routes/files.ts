@@ -175,8 +175,20 @@ fileRoutes.post("/", async (c) => {
   })
 
   try {
-    const pipedStream = inputStream.pipeThrough(countingStream)
-    await c.env.FILES.put(r2Key, pipedStream, {
+    let uploadStream: ReadableStream<Uint8Array> =
+      inputStream.pipeThrough(countingStream)
+    const FLS = (
+      globalThis as unknown as {
+        FixedLengthStream?: new (len: number) => TransformStream
+      }
+    ).FixedLengthStream
+    if (announcedSize !== null && typeof FLS === "function") {
+      const fls = new FLS(announcedSize)
+      uploadStream.pipeTo(fls.writable).catch(() => {})
+      uploadStream = fls.readable
+    }
+
+    await c.env.FILES.put(r2Key, uploadStream, {
       httpMetadata: {
         contentType: fileContentType
       }
