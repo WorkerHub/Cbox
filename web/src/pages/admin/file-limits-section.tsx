@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useOutletContext } from "react-router"
 import { toast } from "sonner"
+import { UnsavedChangesGuard } from "@/components/unsaved-changes-guard"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,36 +15,42 @@ import { validateLimitMB } from "@/lib/limits"
  * 系统管理 · 文件限额（规格 §4、§7）。
  * 全局默认总容量与单文件上限配置；生效值以服务端返回为准（受平台硬顶限制）。
  */
-export function FileLimitsSection({
-  settings,
-  onSaved
-}: {
-  settings: AdminSettings
-  onSaved: (settings: AdminSettings) => void
+export function FileLimitsSection(props?: {
+  settings?: AdminSettings
+  onSaved?: (settings: AdminSettings) => void
 }) {
   const { t } = useTranslation()
-  const limits = settings.fileLimits
+  const outlet = useOutletContext<{
+    settings: AdminSettings
+    onSaved: (settings: AdminSettings) => void
+  } | null>()
+  const settings = props?.settings ?? outlet?.settings
+  const onSaved = props?.onSaved ?? outlet?.onSaved ?? (() => {})
+
+  const limits = settings?.fileLimits
 
   // 生效值以服务端返回为准
-  const effectiveSingle =
-    limits.effectiveSingleMaxMB ?? Math.min(limits.defaultSingleMaxMB, 100)
+  const initialEffectiveSingle =
+    limits?.effectiveSingleMaxMB ??
+    Math.min(limits?.defaultSingleMaxMB ?? 100, 100)
 
   const [defaultQuotaMB, setDefaultQuotaMB] = useState(
-    String(limits.defaultQuotaMB ?? 100)
+    String(limits?.defaultQuotaMB ?? 100)
   )
   const [defaultSingleMaxMB, setDefaultSingleMaxMB] = useState(
-    String(effectiveSingle)
+    String(initialEffectiveSingle)
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
+    if (!settings) return
     const eff =
       settings.fileLimits.effectiveSingleMaxMB ??
       Math.min(settings.fileLimits.defaultSingleMaxMB, 100)
     setDefaultQuotaMB(String(settings.fileLimits.defaultQuotaMB ?? 100))
     setDefaultSingleMaxMB(String(eff))
-  }, [settings.fileLimits])
+  }, [settings])
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,11 +97,21 @@ export function FileLimitsSection({
     }
   }
 
-  const configuredSingle = limits.defaultSingleMaxMB
+  if (!settings) return null
+
+  const effectiveSingle =
+    settings.fileLimits.effectiveSingleMaxMB ??
+    Math.min(settings.fileLimits.defaultSingleMaxMB, 100)
+  const configuredSingle = settings.fileLimits.defaultSingleMaxMB
   const isCapped = configuredSingle > effectiveSingle
+
+  const isDirty =
+    defaultQuotaMB !== String(settings.fileLimits.defaultQuotaMB ?? 100) ||
+    defaultSingleMaxMB !== String(effectiveSingle)
 
   return (
     <section className="space-y-4 rounded-xl border bg-card p-4">
+      <UnsavedChangesGuard isDirty={isDirty} />
       <div className="space-y-1">
         <h3 className="font-heading text-sm font-semibold">
           {t("admin.limits.title")}
