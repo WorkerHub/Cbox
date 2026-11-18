@@ -178,6 +178,9 @@ importers:
 
   web:
     dependencies:
+      '@noble/hashes':
+        specifier: ^2.4.0
+        version: 2.4.0
       '@simplewebauthn/browser':
         specifier: ^14.0.0
         version: 14.0.0

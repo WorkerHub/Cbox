@@ -124,9 +124,6 @@ export interface FileLimitSettings {
   defaultSingleMaxBytes: number
   defaultQuotaMB: number
   defaultSingleMaxMB: number
-  effectiveSingleMaxBytes?: number
-  effectiveSingleMaxMB?: number
-  platformHardCapMB?: number
 }
 
 export interface AdminSettings {
@@ -311,3 +308,54 @@ export interface DeleteFolderResult {
   deletedFiles: number
   deletedBytes: number
 }
+
+export interface UploadInitInput {
+  filename: string
+  declaredSizeBytes: number
+  folderId?: string | null
+  expiresIn?: string | null
+}
+
+export type UploadInitResponse =
+  | {
+      uploadId: string
+      mode: "single"
+      url: string
+    }
+  | {
+      uploadId: string
+      mode: "multipart"
+      partSize: number
+    }
+
+export interface UploadPartUrlsInput {
+  partNumbers: number[]
+}
+
+export interface UploadPartItem {
+  partNumber: number
+  url: string
+}
+
+export interface UploadPartUrlsResponse {
+  parts: UploadPartItem[]
+}
+
+export interface UploadCompletedPart {
+  partNumber: number
+  etag: string
+}
+
+export type UploadCompleteSingleInput = {
+  sha256?: string | null
+  parts?: never
+}
+
+export type UploadCompleteMultipartInput = {
+  sha256?: string | null
+  parts: UploadCompletedPart[]
+}
+
+export type UploadCompleteInput =
+  | UploadCompleteSingleInput
+  | UploadCompleteMultipartInput

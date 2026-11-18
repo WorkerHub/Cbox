@@ -247,6 +247,7 @@
       "select": "Select file",
       "expiration": "Expiration",
       "progress": "Uploading {{percent}}%",
+      "progressBytes": "{{uploaded}} / {{total}}",
       "submit": "Start upload",
       "calculating": "Preparing upload…"
     },
@@ -373,8 +374,6 @@
       "title": "File Limits (Global)",
       "defaultQuotaMB": "Default storage quota (MB)",
       "defaultSingleMaxMB": "Default single file limit (MB)",
-      "effectiveSingleMaxHint": "Effective single file limit: {{effective}} MB",
-      "hardCapCapped": " (configured as {{configured}} MB, capped at 100 MB by platform limit)",
       "save": "Save file limits",
       "saving": "Saving…",
       "saved": "File limits saved",

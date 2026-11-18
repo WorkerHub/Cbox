@@ -247,6 +247,7 @@
       "select": "选择文件",
       "expiration": "过期时间",
       "progress": "正在上传 {{percent}}%",
+      "progressBytes": "{{uploaded}} / {{total}}",
       "submit": "开始上传",
       "calculating": "准备上传…"
     },
@@ -373,8 +374,6 @@
       "title": "文件限额（全局）",
       "defaultQuotaMB": "默认总容量 (MB)",
       "defaultSingleMaxMB": "默认单文件上限 (MB)",
-      "effectiveSingleMaxHint": "生效单文件上限：{{effective}} MB",
-      "hardCapCapped": "（配置为 {{configured}} MB，受平台硬顶 100 MB 限制生效 100 MB）",
       "save": "保存文件限额",
       "saving": "保存中…",
       "saved": "文件限额已保存",

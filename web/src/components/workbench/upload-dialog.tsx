@@ -42,22 +42,44 @@ export function UploadDialog({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [expiresIn, setExpiresIn] = useState<string>("never")
   const [percent, setPercent] = useState<number>(0)
+  const [uploadedBytes, setUploadedBytes] = useState<number>(0)
+  const [totalBytes, setTotalBytes] = useState<number>(0)
   const [busy, setBusy] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState("")
 
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const resetState = () => {
+    setSelectedFile(null)
+    setExpiresIn("never")
+    setPercent(0)
+    setUploadedBytes(0)
+    setTotalBytes(0)
+    setBusy(false)
+    setCalculating(false)
+    setError("")
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    resetState()
+    onOpenChange(false)
+  }
+
   const handleOpenChange = (nextOpen: boolean) => {
-    if (busy) return
     if (!nextOpen) {
-      setSelectedFile(null)
-      setExpiresIn("never")
-      setPercent(0)
-      setBusy(false)
-      setCalculating(false)
-      setError("")
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
+      if (busy) {
+        handleCancel()
+        return
       }
+      resetState()
     }
     onOpenChange(nextOpen)
   }
@@ -67,6 +89,8 @@ export function UploadDialog({
     setSelectedFile(file)
     setError("")
     setPercent(0)
+    setUploadedBytes(0)
+    setTotalBytes(file?.size ?? 0)
   }
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -76,10 +100,20 @@ export function UploadDialog({
     setBusy(true)
     setError("")
     setPercent(0)
+    setUploadedBytes(0)
+    setTotalBytes(selectedFile.size)
+
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     try {
       setCalculating(true)
-      const sha256 = await calculateFileSha256(selectedFile)
+      const sha256 = await calculateFileSha256(selectedFile, {
+        signal: controller.signal
+      })
+      if (controller.signal.aborted) {
+        return
+      }
       setCalculating(false)
 
       await filesApi.upload(
@@ -87,21 +121,32 @@ export function UploadDialog({
         {
           folderId: currentFolderId,
           expiresIn: expiresIn === "never" ? null : expiresIn,
-          sha256
+          sha256,
+          signal: controller.signal
         },
-        (progressPercent) => {
-          setPercent(progressPercent)
+        (progress) => {
+          setUploadedBytes(progress.loaded)
+          setTotalBytes(progress.total)
+          setPercent(progress.percent)
         }
       )
 
-      handleOpenChange(false)
+      resetState()
+      onOpenChange(false)
       onSuccess()
-    } catch (err) {
+    } catch (err: unknown) {
       setCalculating(false)
+      if (
+        controller.signal.aborted ||
+        (err instanceof DOMException && err.name === "AbortError")
+      ) {
+        return
+      }
       const msg = describeApiError(t, err)
       setError(msg)
       toast.error(msg)
     } finally {
+      abortControllerRef.current = null
       setBusy(false)
     }
   }
@@ -157,7 +202,10 @@ export function UploadDialog({
                 <span>
                   {calculating
                     ? t("workbench.uploadDialog.calculating")
-                    : t("workbench.uploadDialog.progress", { percent })}
+                    : t("workbench.uploadDialog.progressBytes", {
+                        uploaded: formatBytes(uploadedBytes),
+                        total: formatBytes(totalBytes)
+                      })}
                 </span>
                 <span>{percent}%</span>
               </div>
@@ -168,12 +216,7 @@ export function UploadDialog({
           {error && <p className="text-xs text-destructive">{error}</p>}
 
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => handleOpenChange(false)}
-              disabled={busy}
-            >
+            <Button type="button" variant="outline" onClick={handleCancel}>
               {t("common.actions.cancel")}
             </Button>
             <Button type="submit" disabled={busy || !selectedFile}>
