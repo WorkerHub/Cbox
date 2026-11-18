@@ -196,6 +196,116 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
     expect(list.objects.length).toBe(1)
   })
 
+  it("无 Content-Length 的 chunked 流式上传超单文件上限：服务端实时中止流、显式回 413 (FILE_TOO_LARGE)、不落元数据、无 R2 孤儿", async () => {
+    const { env, db, r2 } = await initializedContext()
+    const prefix = activePrefix(env)
+    const user = await seedSession(db, prefix, { role: "user" })
+
+    // 设单文件上限 10 字节
+    await env.DB.prepare(
+      `INSERT INTO ${userLimitsTable(prefix)} (user_id, quota_bytes, single_max_bytes, updated_at)
+       VALUES (?, ?, ?, ?)`
+    )
+      .bind(user.userId, 104857600, 10, new Date().toISOString())
+      .run()
+
+    // 构造无 Content-Length 的 chunked 流（两块各 8 字节，累计 16 > 10）
+    const chunk1 = new TextEncoder().encode("12345678")
+    const chunk2 = new TextEncoder().encode("abcdefgh")
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk1)
+        controller.enqueue(chunk2)
+        controller.close()
+      }
+    })
+
+    const res = await request(env, "/api/files?filename=chunked-toolarge.bin", {
+      method: "POST",
+      headers: {
+        cookie: user.cookie,
+        "content-type": "application/octet-stream"
+      },
+      body: stream,
+      // @ts-expect-error duplex required for stream body in undici / node fetch
+      duplex: "half"
+    })
+
+    expect(res.status).toBe(413)
+    const errBody = (await res.json()) as { code: string; limitBytes: number }
+    expect(errBody.code).toBe("FILE_TOO_LARGE")
+    expect(errBody.limitBytes).toBe(10)
+
+    // 确认元数据未入库（无残留元数据）
+    const rows = await env.DB.prepare(
+      `SELECT COUNT(*) as c FROM ${filesTable(prefix)} WHERE user_id = ?`
+    )
+      .bind(user.userId)
+      .first<{ c: number }>()
+    expect(rows?.c).toBe(0)
+
+    // 确认 R2 中无遗留对象（无孤儿）
+    const list = await r2.list({ prefix: `u${user.userId}/` })
+    expect(list.objects.length).toBe(0)
+  })
+
+  it("无 Content-Length 的 chunked 流式上传合规：正常上传成功 (201)、R2 与元数据完整", async () => {
+    const { env, db, r2 } = await initializedContext()
+    const prefix = activePrefix(env)
+    const user = await seedSession(db, prefix, { role: "user" })
+
+    // 构造合规的无 Content-Length 流
+    const chunk1 = new TextEncoder().encode("chunk-data-1;")
+    const chunk2 = new TextEncoder().encode("chunk-data-2")
+    const fullExpected = "chunk-data-1;chunk-data-2"
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk1)
+        controller.enqueue(chunk2)
+        controller.close()
+      }
+    })
+
+    const res = await request(
+      env,
+      "/api/files?filename=chunked-ok.txt&expiresIn=1h",
+      {
+        method: "POST",
+        headers: {
+          cookie: user.cookie,
+          "content-type": "text/plain"
+        },
+        body: stream,
+        // @ts-expect-error duplex required for stream body in undici / node fetch
+        duplex: "half"
+      }
+    )
+
+    expect(res.status).toBe(201)
+    const file = (await res.json()) as {
+      id: string
+      name: string
+      sizeBytes: number
+      contentType: string
+    }
+    expect(file.name).toBe("chunked-ok.txt")
+    expect(file.sizeBytes).toBe(fullExpected.length)
+
+    // 确认元数据已正确入库
+    const meta = await env.DB.prepare(
+      `SELECT * FROM ${filesTable(prefix)} WHERE id = ?`
+    )
+      .bind(file.id)
+      .first<{ size_bytes: number; name: string }>()
+    expect(meta?.name).toBe("chunked-ok.txt")
+    expect(meta?.size_bytes).toBe(fullExpected.length)
+
+    // 确认 R2 对象完整
+    const r2Obj = await r2.get(`u${user.userId}/${file.id}`)
+    expect(r2Obj).not.toBeNull()
+    expect(await r2Obj?.text()).toBe(fullExpected)
+  })
+
   it("GET /api/files/:id/download：登录态本人流式下载带完整标头", async () => {
     const { env, db } = await initializedContext()
     const prefix = activePrefix(env)

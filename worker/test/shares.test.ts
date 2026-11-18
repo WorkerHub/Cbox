@@ -201,4 +201,31 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
       .run()
     expect((await request(env, `/s/${token3}`)).status).toBe(404)
   })
+
+  it("空 token /s/ 与非法形态一律回 404，不落 SPA 200 回落", async () => {
+    const { env } = await initializedContext()
+
+    // 1. GET /s 与 GET /s/ 均显式返回 404，不落 SPA 200
+    const resNoSlash = await request(env, "/s")
+    expect(resNoSlash.status).toBe(404)
+    expect(await resNoSlash.text()).toBe("Not found")
+
+    const resSlash = await request(env, "/s/")
+    expect(resSlash.status).toBe(404)
+    expect(await resSlash.text()).toBe("Not found")
+
+    // 2. 空白 token 或多斜杠形态回 404
+    const resWhitespace = await request(env, "/s/%20")
+    expect(resWhitespace.status).toBe(404)
+    expect(await resWhitespace.text()).toBe("Not found")
+
+    const resMultiSlash = await request(env, "/s//")
+    expect(resMultiSlash.status).toBe(404)
+    expect(await resMultiSlash.text()).toBe("Not found")
+
+    // 3. 多段路径 /s/token/extra 回 404
+    const resMultiSegment = await request(env, "/s/some-token/extra")
+    expect(resMultiSegment.status).toBe(404)
+    expect(await resMultiSegment.text()).toBe("Not found")
+  })
 })
