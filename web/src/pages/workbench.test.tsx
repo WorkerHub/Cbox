@@ -31,7 +31,12 @@ vi.mock("@/lib/api", async (importOriginal) => {
   }
 })
 
-const mockFolderData: FolderListResponse = {
+const futureIso = (hours = 48) =>
+  new Date(Date.now() + hours * 3600 * 1000).toISOString()
+const pastIso = (hours = 1) =>
+  new Date(Date.now() - hours * 3600 * 1000).toISOString()
+
+const buildMockFolderData = (): FolderListResponse => ({
   folder: null,
   breadcrumbs: [{ id: null, name: "Root" }],
   folders: [
@@ -39,7 +44,7 @@ const mockFolderData: FolderListResponse = {
       id: "f1",
       parentId: null,
       name: "subfolder-1",
-      createdAt: "2026-11-18T10:00:00Z"
+      createdAt: pastIso(2)
     }
   ],
   files: [
@@ -51,8 +56,8 @@ const mockFolderData: FolderListResponse = {
       contentType: "application/java-archive",
       sha256:
         "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
-      expiresAt: "2026-11-19T10:00:00Z",
-      createdAt: "2026-11-18T10:00:00Z",
+      expiresAt: futureIso(48),
+      createdAt: pastIso(2),
       expired: false
     }
   ],
@@ -61,11 +66,14 @@ const mockFolderData: FolderListResponse = {
     quotaBytes: 104857600, // 100 MB
     singleMaxBytes: 104857600
   }
-}
+})
 
 describe("WorkbenchPage", () => {
+  let mockFolderData: FolderListResponse
+
   beforeEach(() => {
     vi.clearAllMocks()
+    mockFolderData = buildMockFolderData()
     vi.mocked(foldersApi.list).mockResolvedValue(mockFolderData)
     vi.mocked(sharesApi.list).mockResolvedValue({ items: [] })
   })
@@ -109,7 +117,7 @@ describe("WorkbenchPage", () => {
       id: "f2",
       parentId: null,
       name: "new-folder",
-      createdAt: "2026-11-18T11:00:00Z"
+      createdAt: pastIso(1)
     })
 
     render(
@@ -139,10 +147,10 @@ describe("WorkbenchPage", () => {
       id: "s1",
       fileId: "file-1",
       tokenSuffix: "abcd",
-      expiresAt: "2026-11-19T10:00:00Z",
+      expiresAt: futureIso(48),
       downloadCount: 3,
-      lastDownloadedAt: "2026-11-18T12:00:00Z",
-      createdAt: "2026-11-18T10:30:00Z",
+      lastDownloadedAt: pastIso(1),
+      createdAt: pastIso(2),
       expired: false
     }
 
@@ -150,7 +158,7 @@ describe("WorkbenchPage", () => {
     vi.mocked(sharesApi.create).mockResolvedValue({
       id: "s2",
       url: "https://example.com/s/secret-token-1234",
-      expires_at: "2026-11-19T10:00:00Z",
+      expires_at: futureIso(48),
       tokenSuffix: "1234"
     })
 
