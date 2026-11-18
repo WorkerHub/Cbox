@@ -210,3 +210,68 @@ export interface AdminChangeRoleInput {
 export interface AdminUserActionResult {
   success: true
 }
+
+/* 业务：文件管理与分享（规格 §5、§6、§7、§10） */
+
+export interface UsageInfo {
+  usedBytes: number
+  quotaBytes: number
+  singleMaxBytes: number
+}
+
+export interface FolderItem {
+  id: string
+  parentId: string | null
+  name: string
+  createdAt: string
+}
+
+export interface BreadcrumbItem {
+  id: string | null
+  name: string
+}
+
+export interface FileItem {
+  id: string
+  folderId: string | null
+  name: string
+  sizeBytes: number
+  contentType: string
+  sha256: string | null
+  expiresAt: string | null
+  createdAt: string
+  expired: boolean
+}
+
+export interface FolderListResponse {
+  folder: FolderItem | null
+  breadcrumbs: BreadcrumbItem[]
+  folders: FolderItem[]
+  files: FileItem[]
+  usage: UsageInfo
+}
+
+export interface ShareItem {
+  id: string
+  fileId: string
+  tokenSuffix: string
+  expiresAt: string | null
+  downloadCount: number
+  lastDownloadedAt: string | null
+  createdAt: string
+  expired: boolean
+}
+
+export interface CreateShareResult {
+  id: string
+  url: string
+  expires_at: string | null
+  tokenSuffix: string
+}
+
+export interface DeleteFolderResult {
+  success: boolean
+  deletedFolders: number
+  deletedFiles: number
+  deletedBytes: number
+}

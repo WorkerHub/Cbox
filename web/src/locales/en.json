@@ -83,7 +83,19 @@
       "DISPLAY_NAME_LOCKED": "Display name editing is locked",
       "SELF_ACTION_FORBIDDEN": "You cannot perform this action on your own account",
       "LAST_ADMIN": "Keep at least one active admin",
-      "USER_NOT_FOUND": "User not found"
+      "USER_NOT_FOUND": "User not found",
+      "FILE_TOO_LARGE": "File exceeds single file size limit",
+      "QUOTA_EXCEEDED": "Storage quota exceeded",
+      "FILE_NAME_CONFLICT": "A file with the same name already exists in this folder",
+      "FOLDER_NAME_CONFLICT": "A folder with the same name already exists in this folder",
+      "FOLDER_NOT_FOUND": "Folder not found",
+      "FILE_NOT_FOUND": "File not found or expired",
+      "SHARE_NOT_FOUND": "Share link not found or expired",
+      "INVALID_FOLDER_NAME": "Invalid folder name",
+      "INVALID_FOLDER_ID": "Root folder cannot be deleted",
+      "INVALID_EXPIRES_IN": "Invalid expiration preset",
+      "UPLOAD_FAILED": "File upload failed, please retry",
+      "MISSING_FILE": "Please select a file to upload"
     }
   },
   "home": {
@@ -172,6 +184,7 @@
   },
   "workbench": {
     "title": "Workbench",
+    "root": "All files",
     "nav": {
       "workbench": "Workbench",
       "settings": "Settings",
@@ -185,7 +198,83 @@
       "expand": "Expand sidebar",
       "toggle": "Toggle sidebar"
     },
-    "logout": "Sign out"
+    "logout": "Sign out",
+    "actions": {
+      "upload": "Upload",
+      "newFolder": "New folder",
+      "download": "Download",
+      "share": "Share",
+      "changeExpiration": "Change expiration",
+      "delete": "Delete",
+      "open": "Open",
+      "copy": "Copy",
+      "copied": "Copied",
+      "revoke": "Revoke"
+    },
+    "table": {
+      "name": "Name",
+      "size": "Size",
+      "expires": "Expiration",
+      "actions": "Actions",
+      "empty": "No content"
+    },
+    "status": {
+      "expired": "Expired",
+      "never": "Never"
+    },
+    "presets": {
+      "never": "Never",
+      "1h": "1 hour",
+      "24h": "24 hours",
+      "7d": "7 days",
+      "30d": "30 days",
+      "cappedAt": "Expiration capped at file expiration"
+    },
+    "usage": {
+      "label": "Storage usage",
+      "singleMax": "Single file limit {{size}}",
+      "detail": "{{used}} / {{total}}"
+    },
+    "uploadDialog": {
+      "title": "Upload file",
+      "select": "Select file",
+      "expiration": "Expiration",
+      "progress": "Uploading {{percent}}%",
+      "submit": "Start upload",
+      "calculating": "Preparing upload…"
+    },
+    "folderDialog": {
+      "title": "New folder",
+      "placeholder": "Folder name",
+      "submit": "Create"
+    },
+    "shareDialog": {
+      "title": "Public share",
+      "expiration": "Expiration",
+      "generate": "Generate direct link",
+      "directLink": "Direct link",
+      "copyLink": "Copy link",
+      "sha256": "File SHA-256",
+      "copySha256": "Copy SHA-256",
+      "existingShares": "Existing shares",
+      "suffix": "Token suffix {{suffix}}",
+      "downloads": "{{count}} downloads",
+      "noDownloads": "0 downloads",
+      "revoked": "Revoked",
+      "noExisting": "No active shares"
+    },
+    "editExpirationDialog": {
+      "title": "Change file expiration",
+      "expiration": "Expiration preset",
+      "submit": "Save"
+    },
+    "deleteDialog": {
+      "deleteFileTitle": "Delete file",
+      "deleteFolderTitle": "Delete folder",
+      "deleteFileDesc": "Are you sure you want to delete this file? Any existing share links will become invalid.",
+      "deleteFolderDesc": "Are you sure you want to delete this folder? All subfolders, files, and shares inside will be permanently deleted.",
+      "confirm": "Confirm delete"
+    }
   },
   "settings": {
     "title": "Settings",
