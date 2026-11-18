@@ -206,8 +206,8 @@ describe("filesApi 直传与分片上传", () => {
     )
 
     await filesApi.initUpload({
-      name: "test.png",
-      sizeBytes: 1024,
+      filename: "test.png",
+      declaredSizeBytes: 1024,
       folderId: "f-1",
       expiresIn: "7d"
     })
@@ -223,9 +223,7 @@ describe("filesApi 直传与分片上传", () => {
         url: "/api/files/uploads/init",
         method: "POST",
         body: {
-          name: "test.png",
           filename: "test.png",
-          sizeBytes: 1024,
           declaredSizeBytes: 1024,
           folderId: "f-1",
           expiresIn: "7d"
@@ -286,20 +284,15 @@ describe("filesApi 直传与分片上传", () => {
 
     const progressUpdates: Array<{ loaded: number; total: number; percent: number }> =
       []
-    let recordedUploadId: string | null = null
 
     const result = await filesApi.upload(
       file,
       {
-        sha256: "sha256-hello",
-        onUploadIdCreated: (id) => {
-          recordedUploadId = id
-        }
+        sha256: "sha256-hello"
       },
       (p) => progressUpdates.push(p)
     )
 
-    expect(recordedUploadId).toBe("upload-single-1")
     expect(result).toEqual(mockFileItem)
     expect(MockXHR.instances).toHaveLength(1)
     expect(MockXHR.instances[0].url).toBe("https://r2.example.com/single-put")
@@ -410,5 +403,37 @@ describe("filesApi 直传与分片上传", () => {
 
     await expect(filesApi.upload(file)).rejects.toThrow()
     expect(abortCalledWith).toBe("upload-fail-1")
+  })
+
+  it("upload 信号中止 (signal abort) 时调用 abortUpload 清理 pending 记录", async () => {
+    const file = new File(["content"], "abort.txt", { type: "text/plain" })
+    let abortCalledWith: string | null = null
+    const controller = new AbortController()
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit = {}) => {
+        if (url === "/api/files/uploads/init") {
+          return respond(200, {
+            uploadId: "upload-abort-1",
+            mode: "single",
+            partSize: 10485760,
+            url: "https://r2.example.com/abort-put"
+          })
+        }
+        if (url === "/api/files/uploads/upload-abort-1" && init.method === "DELETE") {
+          abortCalledWith = "upload-abort-1"
+          return respond(200, { success: true })
+        }
+        return respond(404, {})
+      })
+    )
+
+    const uploadPromise = filesApi.upload(file, { signal: controller.signal })
+    // 触发取消
+    controller.abort()
+
+    await expect(uploadPromise).rejects.toThrow()
+    expect(abortCalledWith).toBe("upload-abort-1")
   })
 })

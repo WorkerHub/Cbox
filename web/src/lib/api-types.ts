@@ -310,8 +310,8 @@ export interface DeleteFolderResult {
 }
 
 export interface UploadInitInput {
-  name: string
-  sizeBytes: number
+  filename: string
+  declaredSizeBytes: number
   folderId?: string | null
   expiresIn?: string | null
 }
@@ -346,12 +346,17 @@ export interface UploadCompletedPart {
   etag: string
 }
 
+export type UploadCompleteSingleInput = {
+  sha256?: string | null
+  parts?: never
+}
+
+export type UploadCompleteMultipartInput = {
+  sha256?: string | null
+  parts: UploadCompletedPart[]
+}
+
 export type UploadCompleteInput =
-  | {
-      sha256?: string | null
-    }
-  | {
-      sha256?: string | null
-      parts: UploadCompletedPart[]
-    }
+  | UploadCompleteSingleInput
+  | UploadCompleteMultipartInput
 

@@ -76,7 +76,7 @@ describe("UploadDialog", () => {
     })
   })
 
-  it("上传中可点击取消按钮中断上传并调用 abortUpload", async () => {
+  it("上传中可点击取消按钮中断上传", async () => {
     const user = userEvent.setup()
     const handleSuccess = vi.fn()
     const handleOpenChange = vi.fn()
@@ -86,7 +86,6 @@ describe("UploadDialog", () => {
     vi.mocked(filesApi.upload).mockImplementation(
       async (_file, options, onProgress) => {
         caughtSignal = options?.signal
-        options?.onUploadIdCreated?.("up-abort-test")
         onProgress?.({ loaded: 100, total: 1000, percent: 10 })
         return new Promise((_resolve, reject) => {
           caughtSignal?.addEventListener("abort", () => {
@@ -95,8 +94,6 @@ describe("UploadDialog", () => {
         })
       }
     )
-
-    vi.mocked(filesApi.abortUpload).mockResolvedValue({ success: true })
 
     render(
       <UploadDialog
@@ -124,7 +121,6 @@ describe("UploadDialog", () => {
 
     await waitFor(() => {
       expect(caughtSignal?.aborted).toBe(true)
-      expect(filesApi.abortUpload).toHaveBeenCalledWith("up-abort-test")
       expect(handleOpenChange).toHaveBeenCalledWith(false)
       expect(handleSuccess).not.toHaveBeenCalled()
     })

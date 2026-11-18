@@ -49,7 +49,6 @@ export function UploadDialog({
   const [error, setError] = useState("")
 
   const abortControllerRef = useRef<AbortController | null>(null)
-  const currentUploadIdRef = useRef<string | null>(null)
 
   const resetState = () => {
     setSelectedFile(null)
@@ -65,19 +64,10 @@ export function UploadDialog({
     }
   }
 
-  const handleCancel = async () => {
+  const handleCancel = () => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
-    }
-    const uploadId = currentUploadIdRef.current
-    if (uploadId) {
-      try {
-        await filesApi.abortUpload(uploadId)
-      } catch {
-        // ignore abort cleanup error
-      }
-      currentUploadIdRef.current = null
     }
     resetState()
     onOpenChange(false)
@@ -86,7 +76,7 @@ export function UploadDialog({
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       if (busy) {
-        void handleCancel()
+        handleCancel()
         return
       }
       resetState()
@@ -115,7 +105,6 @@ export function UploadDialog({
 
     const controller = new AbortController()
     abortControllerRef.current = controller
-    currentUploadIdRef.current = null
 
     try {
       setCalculating(true)
@@ -133,10 +122,7 @@ export function UploadDialog({
           folderId: currentFolderId,
           expiresIn: expiresIn === "never" ? null : expiresIn,
           sha256,
-          signal: controller.signal,
-          onUploadIdCreated: (uploadId) => {
-            currentUploadIdRef.current = uploadId
-          }
+          signal: controller.signal
         },
         (progress) => {
           setUploadedBytes(progress.loaded)
@@ -161,7 +147,6 @@ export function UploadDialog({
       toast.error(msg)
     } finally {
       abortControllerRef.current = null
-      currentUploadIdRef.current = null
       setBusy(false)
     }
   }

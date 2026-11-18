@@ -36,6 +36,7 @@ import type {
   TwoFactorMethod,
   UploadCompletedPart,
   UploadCompleteInput,
+  UploadInitInput,
   UploadInitResponse,
   UploadPartUrlsResponse,
   UsageInfo,
@@ -386,13 +387,11 @@ export interface UploadFileOptions {
   expiresIn?: string | null
   sha256?: string | null
   signal?: AbortSignal
-  onUploadIdCreated?: (uploadId: string) => void
 }
 
 function uploadChunkWithProgress(
   url: string,
   chunk: Blob,
-  contentType?: string,
   signal?: AbortSignal,
   onProgress?: (loaded: number) => void
 ): Promise<{ etag: string }> {
@@ -419,9 +418,6 @@ function uploadChunkWithProgress(
 
     const xhr = new XMLHttpRequest()
     xhr.open("PUT", url)
-    if (contentType) {
-      xhr.setRequestHeader("Content-Type", contentType)
-    }
 
     if (xhr.upload && onProgress) {
       xhr.upload.onprogress = (event) => {
@@ -476,12 +472,11 @@ function uploadChunkWithProgress(
 async function uploadPartWithRetry(
   url: string,
   chunk: Blob,
-  contentType?: string,
   signal?: AbortSignal,
   onProgress?: (loaded: number) => void,
   maxRetries = 3
 ): Promise<{ etag: string }> {
-  let attempt = 0
+  let retries = 0
   while (true) {
     if (signal?.aborted) {
       throw new DOMException("The user aborted a request.", "AbortError")
@@ -490,7 +485,6 @@ async function uploadPartWithRetry(
       return await uploadChunkWithProgress(
         url,
         chunk,
-        contentType,
         signal,
         onProgress
       )
@@ -501,8 +495,8 @@ async function uploadPartWithRetry(
       ) {
         throw err
       }
-      attempt++
-      if (attempt >= maxRetries) {
+      retries++
+      if (retries > maxRetries) {
         throw err
       }
       await new Promise((r) => setTimeout(r, 1000))
@@ -511,23 +505,12 @@ async function uploadPartWithRetry(
 }
 
 export const filesApi = {
-  initUpload: (input: {
-    name: string
-    filename?: string
-    sizeBytes: number
-    declaredSizeBytes?: number
-    contentType?: string
-    folderId?: string | null
-    expiresIn?: string | null
-  }) =>
+  initUpload: (input: UploadInitInput) =>
     request<UploadInitResponse>("/files/uploads/init", {
       method: "POST",
       body: {
-        name: input.name,
-        filename: input.filename ?? input.name,
-        sizeBytes: input.sizeBytes,
-        declaredSizeBytes: input.declaredSizeBytes ?? input.sizeBytes,
-        contentType: input.contentType,
+        filename: input.filename,
+        declaredSizeBytes: input.declaredSizeBytes,
         folderId: input.folderId,
         expiresIn: input.expiresIn
       }
@@ -563,27 +546,20 @@ export const filesApi = {
       throw new DOMException("The user aborted a request.", "AbortError")
     }
 
-    const contentType = file.type || "application/octet-stream"
-
     const initRes = await filesApi.initUpload({
-      name: file.name,
       filename: file.name,
-      sizeBytes: file.size,
       declaredSizeBytes: file.size,
-      contentType,
       folderId: options?.folderId,
       expiresIn: options?.expiresIn
     })
 
     const uploadId = initRes.uploadId
-    options?.onUploadIdCreated?.(uploadId)
 
     if (initRes.mode === "single") {
       try {
         await uploadPartWithRetry(
           initRes.url,
           file,
-          contentType,
           signal,
           (loaded) => {
             const total = file.size
@@ -613,9 +589,12 @@ export const filesApi = {
     const totalParts = Math.max(1, Math.ceil(file.size / partSize))
     const parts: UploadCompletedPart[] = []
     const partBytesLoaded = new Array<number>(totalParts).fill(0)
+    let maxReportedLoaded = 0
 
     const reportProgress = () => {
-      const loaded = partBytesLoaded.reduce((acc, curr) => acc + curr, 0)
+      const sumLoaded = partBytesLoaded.reduce((acc, curr) => acc + curr, 0)
+      const loaded = Math.min(file.size, Math.max(maxReportedLoaded, sumLoaded))
+      maxReportedLoaded = loaded
       const total = file.size
       const percent =
         total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 100
@@ -658,10 +637,12 @@ export const filesApi = {
         const { etag } = await uploadPartWithRetry(
           url,
           chunk,
-          undefined,
           signal,
           (loaded) => {
-            partBytesLoaded[partNumber - 1] = loaded
+            partBytesLoaded[partNumber - 1] = Math.max(
+              partBytesLoaded[partNumber - 1],
+              loaded
+            )
             reportProgress()
           },
           3
