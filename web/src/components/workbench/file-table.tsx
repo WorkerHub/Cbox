@@ -3,8 +3,10 @@ import {
   DownloadIcon,
   FileIcon,
   FolderIcon,
+  FolderInputIcon,
   FolderOpenIcon,
   MoreHorizontalIcon,
+  PencilIcon,
   Share2Icon,
   Trash2Icon
 } from "lucide-react"
@@ -36,6 +38,8 @@ interface FileTableProps {
   onOpenFolder: (folderId: string) => void
   onDeleteFolder: (folder: FolderItem) => void
   onShareFile: (file: FileItem) => void
+  onRenameFile: (file: FileItem) => void
+  onMoveFile: (file: FileItem) => void
   onEditExpiration: (file: FileItem) => void
   onDeleteFile: (file: FileItem) => void
 }
@@ -46,6 +50,8 @@ export function FileTable({
   onOpenFolder,
   onDeleteFolder,
   onShareFile,
+  onRenameFile,
+  onMoveFile,
   onEditExpiration,
   onDeleteFile
 }: FileTableProps) {
@@ -208,6 +214,14 @@ export function FileTable({
                           >
                             <Share2Icon className="mr-2 h-3.5 w-3.5" />
                             {t("workbench.actions.share")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onRenameFile(file)}>
+                            <PencilIcon className="mr-2 h-3.5 w-3.5" />
+                            {t("workbench.actions.rename")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => onMoveFile(file)}>
+                            <FolderInputIcon className="mr-2 h-3.5 w-3.5" />
+                            {t("workbench.actions.moveTo")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => onEditExpiration(file)}

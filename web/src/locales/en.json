@@ -94,6 +94,7 @@
       "QUOTA_EXCEEDED": "Storage quota exceeded",
       "FILE_NAME_CONFLICT": "A file with the same name already exists in this folder",
       "FOLDER_NAME_CONFLICT": "A folder with the same name already exists in this folder",
+      "INVALID_FILENAME": "Invalid file name",
       "FOLDER_NOT_FOUND": "Folder not found",
       "FILE_NOT_FOUND": "File not found or expired",
       "SHARE_NOT_FOUND": "Share link not found or expired",
@@ -209,6 +210,8 @@
       "newFolder": "New folder",
       "download": "Download",
       "share": "Share",
+      "rename": "Rename",
+      "moveTo": "Move to",
       "changeExpiration": "Change expiration",
       "delete": "Delete",
       "open": "Open",
@@ -274,6 +277,19 @@
       "title": "Change file expiration",
       "expiration": "Expiration preset",
       "submit": "Save"
+    },
+    "renameDialog": {
+      "title": "Rename file",
+      "placeholder": "File name",
+      "submit": "Save"
+    },
+    "moveDialog": {
+      "title": "Move file",
+      "rootDir": "Root folder",
+      "currentFolder": "Current folder",
+      "empty": "No other folders",
+      "loading": "Loading folders…",
+      "submit": "Move"
     },
     "deleteDialog": {
       "deleteFileTitle": "Delete file",

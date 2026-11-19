@@ -12,6 +12,8 @@ import {
 } from "@/components/workbench/delete-confirm-dialog"
 import { EditExpirationDialog } from "@/components/workbench/edit-expiration-dialog"
 import { FileTable } from "@/components/workbench/file-table"
+import { MoveFileDialog } from "@/components/workbench/move-file-dialog"
+import { RenameFileDialog } from "@/components/workbench/rename-file-dialog"
 import { ShareDialog } from "@/components/workbench/share-dialog"
 import { UploadDialog } from "@/components/workbench/upload-dialog"
 import { UsageBar } from "@/components/workbench/usage-bar"
@@ -43,6 +45,8 @@ export function WorkbenchPage() {
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [shareFile, setShareFile] = useState<FileItem | null>(null)
+  const [renameFile, setRenameFile] = useState<FileItem | null>(null)
+  const [moveFile, setMoveFile] = useState<FileItem | null>(null)
   const [editExpFile, setEditExpFile] = useState<FileItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
 
@@ -130,6 +134,8 @@ export function WorkbenchPage() {
             onOpenFolder={handleSelectFolder}
             onDeleteFolder={(f) => setDeleteTarget({ type: "folder", item: f })}
             onShareFile={(file) => setShareFile(file)}
+            onRenameFile={(file) => setRenameFile(file)}
+            onMoveFile={(file) => setMoveFile(file)}
             onEditExpiration={(file) => setEditExpFile(file)}
             onDeleteFile={(file) =>
               setDeleteTarget({ type: "file", item: file })
@@ -162,6 +168,24 @@ export function WorkbenchPage() {
           if (!open) setShareFile(null)
         }}
         file={shareFile}
+      />
+
+      <RenameFileDialog
+        open={Boolean(renameFile)}
+        onOpenChange={(open) => {
+          if (!open) setRenameFile(null)
+        }}
+        file={renameFile}
+        onSuccess={loadData}
+      />
+
+      <MoveFileDialog
+        open={Boolean(moveFile)}
+        onOpenChange={(open) => {
+          if (!open) setMoveFile(null)
+        }}
+        file={moveFile}
+        onSuccess={loadData}
       />
 
       <EditExpirationDialog

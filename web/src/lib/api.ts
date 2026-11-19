@@ -16,6 +16,7 @@ import type {
   Me,
   MeUpdateInput,
   PasskeySummary,
+  PatchFileInput,
   PublicInfo,
   RegisterResult,
   SetupOwnerInput,
@@ -630,6 +631,12 @@ export const filesApi = {
       throw err
     }
   },
+
+  patch: (id: string, input: PatchFileInput) =>
+    request<FileItem>(`/files/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: input
+    }),
 
   patchExpiration: (id: string, expiresIn?: string | null) =>
     request<{ id: string; expiresAt: string | null }>(
