@@ -19,6 +19,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     filesApi: {
       ...actual.filesApi,
       upload: vi.fn(),
+      patch: vi.fn(),
       patchExpiration: vi.fn(),
       delete: vi.fn()
     },
@@ -302,5 +303,213 @@ describe("WorkbenchPage", () => {
     expect(
       await screen.findByText("文件大小超过单文件上限")
     ).toBeInTheDocument()
+  })
+
+  it("重命名弹窗预填文件名并默认选中扩展名前缀，提交调用 patch name", async () => {
+    const user = userEvent.setup()
+    vi.mocked(filesApi.patch).mockResolvedValue({
+      ...mockFolderData.files[0],
+      name: "renamed.jar"
+    })
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+
+    const renameItem = await screen.findByText("重命名")
+    await user.click(renameItem)
+
+    expect(await screen.findByText("重命名文件")).toBeInTheDocument()
+    const input = screen.getByTestId("rename-file-input") as HTMLInputElement
+    await waitFor(() => {
+      expect(input.selectionStart).toBe(0)
+      expect(input.selectionEnd).toBe(3)
+    })
+
+    await user.clear(input)
+    await user.type(input, "renamed.jar")
+    await user.click(screen.getByRole("button", { name: "保存" }))
+
+    await waitFor(() => {
+      expect(filesApi.patch).toHaveBeenCalledWith("file-1", {
+        name: "renamed.jar"
+      })
+    })
+  })
+
+  it("重命名冲突（409）时弹窗内报错且不关闭弹窗", async () => {
+    const user = userEvent.setup()
+    vi.mocked(filesApi.patch).mockRejectedValue(
+      new ApiError({
+        status: 409,
+        code: "FILE_NAME_CONFLICT",
+        message: "A file with the same name already exists in this folder"
+      })
+    )
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+    await user.click(await screen.findByText("重命名"))
+
+    const input = screen.getByTestId("rename-file-input")
+    await user.clear(input)
+    await user.type(input, "conflict.jar")
+    await user.click(screen.getByRole("button", { name: "保存" }))
+
+    expect(
+      await screen.findByText("当前文件夹下已存在同名文件")
+    ).toBeInTheDocument()
+    expect(screen.getByText("重命名文件")).toBeInTheDocument()
+  })
+
+  it("移动文件弹窗展示根目录与文件夹树，当前所在标注且不可选，提交 patch folderId", async () => {
+    const user = userEvent.setup()
+    vi.mocked(filesApi.patch).mockResolvedValue({
+      ...mockFolderData.files[0],
+      folderId: "f1"
+    })
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+
+    const moveItem = await screen.findByText("移动到")
+    await user.click(moveItem)
+
+    expect(await screen.findByText("移动文件")).toBeInTheDocument()
+    expect(await screen.findByText("根目录")).toBeInTheDocument()
+    expect(screen.getByTestId("move-target-f1")).toHaveTextContent(
+      "subfolder-1"
+    )
+
+    // 文件当前在根目录（folderId 为 null），根目录被标注且 disabled
+    const rootBtn = screen.getByTestId("move-target-root")
+    expect(rootBtn).toBeDisabled()
+    expect(rootBtn).toHaveTextContent("当前文件夹")
+
+    const subfolderBtn = screen.getByTestId("move-target-f1")
+    expect(subfolderBtn).not.toBeDisabled()
+
+    await user.click(subfolderBtn)
+    await user.click(screen.getByRole("button", { name: "移动" }))
+
+    await waitFor(() => {
+      expect(filesApi.patch).toHaveBeenCalledWith("file-1", {
+        folderId: "f1"
+      })
+    })
+  })
+
+  it("文件在子文件夹中时移动到根目录提交 folderId 为 null", async () => {
+    const user = userEvent.setup()
+    const folderDataWithFileInSubfolder: FolderListResponse = {
+      ...mockFolderData,
+      files: [
+        {
+          ...mockFolderData.files[0],
+          folderId: "f1"
+        }
+      ]
+    }
+    vi.mocked(foldersApi.list).mockResolvedValue(folderDataWithFileInSubfolder)
+    vi.mocked(filesApi.patch).mockResolvedValue({
+      ...folderDataWithFileInSubfolder.files[0],
+      folderId: null
+    })
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+    await user.click(await screen.findByText("移动到"))
+
+    expect(await screen.findByText("移动文件")).toBeInTheDocument()
+    const subfolderBtn = await screen.findByTestId("move-target-f1")
+    expect(subfolderBtn).toBeDisabled()
+    expect(subfolderBtn).toHaveTextContent("当前文件夹")
+
+    const rootBtn = screen.getByTestId("move-target-root")
+    expect(rootBtn).not.toBeDisabled()
+
+    await user.click(rootBtn)
+    await user.click(screen.getByRole("button", { name: "移动" }))
+
+    await waitFor(() => {
+      expect(filesApi.patch).toHaveBeenCalledWith("file-1", {
+        folderId: null
+      })
+    })
+  })
+
+  it("移动弹窗在根目录文件夹列表拉取失败时呈现错误提示", async () => {
+    const user = userEvent.setup()
+    vi.mocked(foldersApi.list)
+      .mockResolvedValueOnce(mockFolderData)
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 500,
+          code: "INTERNAL_ERROR",
+          message: "Database error"
+        })
+      )
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+    await user.click(await screen.findByText("移动到"))
+
+    expect(await screen.findByText("移动文件")).toBeInTheDocument()
+    const errorEl = await screen.findByTestId("move-error")
+    expect(errorEl).toBeInTheDocument()
+    expect(errorEl.textContent).toBeTruthy()
+    expect(screen.getByRole("button", { name: "移动" })).toBeDisabled()
+  })
+
+  it("用量条在 ≥90% 时使用红色警示样式", async () => {
+    const highUsageData: FolderListResponse = {
+      ...mockFolderData,
+      usage: {
+        usedBytes: 95 * 1048576,
+        quotaBytes: 100 * 1048576,
+        singleMaxBytes: 100 * 1048576
+      }
+    }
+    vi.mocked(foldersApi.list).mockResolvedValue(highUsageData)
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    const usageBar = screen.getByTestId("usage-bar")
+    expect(usageBar).toBeInTheDocument()
+    expect(usageBar.querySelector(".bg-destructive")).toBeInTheDocument()
   })
 })

@@ -94,6 +94,7 @@
       "QUOTA_EXCEEDED": "可用空间不足",
       "FILE_NAME_CONFLICT": "当前文件夹下已存在同名文件",
       "FOLDER_NAME_CONFLICT": "当前文件夹下已存在同名文件夹",
+      "INVALID_FILENAME": "文件名不合法",
       "FOLDER_NOT_FOUND": "文件夹不存在",
       "FILE_NOT_FOUND": "文件不存在或已失效",
       "SHARE_NOT_FOUND": "分享链接不存在或已失效",
@@ -209,6 +210,8 @@
       "newFolder": "新建文件夹",
       "download": "下载",
       "share": "分享",
+      "rename": "重命名",
+      "moveTo": "移动到",
       "changeExpiration": "修改过期",
       "delete": "删除",
       "open": "打开",
@@ -274,6 +277,18 @@
       "title": "修改文件过期时间",
       "expiration": "过期预设",
       "submit": "保存"
+    },
+    "renameDialog": {
+      "title": "重命名文件",
+      "placeholder": "文件名",
+      "submit": "保存"
+    },
+    "moveDialog": {
+      "title": "移动文件",
+      "rootDir": "根目录",
+      "currentFolder": "当前文件夹",
+      "loading": "正在加载文件夹…",
+      "submit": "移动"
     },
     "deleteDialog": {
       "deleteFileTitle": "删除文件",

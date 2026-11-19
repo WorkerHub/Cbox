@@ -263,6 +263,12 @@ export interface FileItem {
   }
 }
 
+export interface PatchFileInput {
+  name?: string
+  folderId?: string | null
+  expiresIn?: string | null
+}
+
 export interface FolderListResponse {
   folder: FolderItem | null
   breadcrumbs: BreadcrumbItem[]
