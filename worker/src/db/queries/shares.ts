@@ -132,8 +132,7 @@ export async function createShareRecord(
           : typeof err === "object" && err !== null && "message" in err
             ? String((err as any).message)
             : String(err)
-      const isConflict =
-        /unique/i.test(message) || /constraint/i.test(message)
+      const isConflict = /unique/i.test(message) || /constraint/i.test(message)
       if (!isConflict || attempt === MAX_RETRIES) {
         throw err
       }
