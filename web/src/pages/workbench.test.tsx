@@ -190,7 +190,7 @@ describe("WorkbenchPage", () => {
     await user.click(screen.getByRole("button", { name: "生成分享直链" }))
 
     await waitFor(() => {
-      expect(sharesApi.create).toHaveBeenCalledWith("file-1", "24h")
+      expect(sharesApi.create).toHaveBeenCalledWith("file-1", "file")
     })
     expect(
       await screen.findByDisplayValue("https://example.com/s/secret-token-1234")

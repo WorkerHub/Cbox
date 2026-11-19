@@ -274,6 +274,11 @@ export interface FileItem {
   expiresAt: string | null
   createdAt: string
   expired: boolean
+  /** 上传完成响应专属：自动创建的分享（明文令牌仅此一次，其余列表接口不回显）。 */
+  share?: {
+    token: string
+    expiresAt: string | null
+  }
 }
 
 export interface FolderListResponse {

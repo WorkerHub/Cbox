@@ -230,6 +230,7 @@
       "never": "永不过期"
     },
     "presets": {
+      "file": "跟随文件",
       "never": "永不过期",
       "1h": "1 小时",
       "24h": "24 小时",
@@ -249,7 +250,8 @@
       "progress": "正在上传 {{percent}}%",
       "progressBytes": "{{uploaded}} / {{total}}",
       "submit": "开始上传",
-      "calculating": "准备上传…"
+      "calculating": "准备上传…",
+      "done": "完成"
     },
     "folderDialog": {
       "title": "新建文件夹",

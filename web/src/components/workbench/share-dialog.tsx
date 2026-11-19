@@ -31,13 +31,13 @@ interface ShareDialogProps {
   file: FileItem | null
 }
 
-const ALL_SHARE_PRESETS = ["1h", "24h", "7d", "never"] as const
+const ALL_SHARE_PRESETS = ["file", "1h", "24h", "7d", "never"] as const
 
 export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
   const { t } = useTranslation()
   const [shares, setShares] = useState<ShareItem[]>([])
   const [loadingShares, setLoadingShares] = useState(false)
-  const [expiresIn, setExpiresIn] = useState<string>("24h")
+  const [expiresIn, setExpiresIn] = useState<string>("file")
   const [createdUrl, setCreatedUrl] = useState<string>("")
   const [generating, setGenerating] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -46,21 +46,11 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
 
   const fileHasExpiration = Boolean(file?.expiresAt)
 
-  // 若文件本身有过期时间，封顶处理：
-  // 1. 不可选择 "never"（永不过期）
-  // 2. 若文件剩余时间小于 24 小时，默认档位调整为 1h
+  // 默认「跟随文件」：分享到期与文件到期一致（文件永不过期则分享也永不过期）。
+  // 其余预设仍受文件有效期封顶（后端截断）。
   useEffect(() => {
     if (!file) return
-    if (file.expiresAt) {
-      const remainingMs = new Date(file.expiresAt).getTime() - Date.now()
-      if (remainingMs < 24 * 3600 * 1000) {
-        setExpiresIn("1h")
-      } else {
-        setExpiresIn("24h")
-      }
-    } else {
-      setExpiresIn("24h")
-    }
+    setExpiresIn("file")
   }, [file])
 
   // 打开弹窗时拉取已有分享

@@ -1,3 +1,4 @@
+import { CheckIcon, CopyIcon, LinkIcon } from "lucide-react"
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -9,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import {
   Select,
@@ -47,8 +49,17 @@ export function UploadDialog({
   const [busy, setBusy] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [error, setError] = useState("")
+  const [completedShare, setCompletedShare] = useState<{
+    token: string
+    expiresAt: string | null
+  } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const abortControllerRef = useRef<AbortController | null>(null)
+
+  const shareUrl = completedShare
+    ? `${window.location.origin}/s/${completedShare.token}`
+    : ""
 
   const resetState = () => {
     setSelectedFile(null)
@@ -59,6 +70,8 @@ export function UploadDialog({
     setBusy(false)
     setCalculating(false)
     setError("")
+    setCompletedShare(null)
+    setCopied(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -79,9 +92,31 @@ export function UploadDialog({
         handleCancel()
         return
       }
+      const completed = completedShare !== null
       resetState()
+      if (completed) {
+        onSuccess()
+      }
     }
     onOpenChange(nextOpen)
+  }
+
+  const handleCopy = async () => {
+    if (!completedShare) return
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      toast.success(t("workbench.actions.copied"))
+    } catch {
+      toast.error(t("errors.generic"))
+    }
+  }
+
+  const handleDone = () => {
+    resetState()
+    onOpenChange(false)
+    onSuccess()
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,7 +151,7 @@ export function UploadDialog({
       }
       setCalculating(false)
 
-      await filesApi.upload(
+      const result = await filesApi.upload(
         selectedFile,
         {
           folderId: currentFolderId,
@@ -131,9 +166,13 @@ export function UploadDialog({
         }
       )
 
-      resetState()
-      onOpenChange(false)
-      onSuccess()
+      if (result.share) {
+        setCompletedShare(result.share)
+      } else {
+        resetState()
+        onOpenChange(false)
+        onSuccess()
+      }
     } catch (err: unknown) {
       setCalculating(false)
       if (
@@ -158,74 +197,105 @@ export function UploadDialog({
           <DialogTitle>{t("workbench.uploadDialog.title")}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleUpload} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileChange}
-              disabled={busy}
-              className="file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground hover:file:opacity-90 block w-full text-xs text-muted-foreground"
-            />
-            {selectedFile && (
-              <div className="text-xs text-muted-foreground">
-                {selectedFile.name} ({formatBytes(selectedFile.size)})
+        {completedShare ? (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 rounded-md border border-border bg-background p-2">
+              <LinkIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <Input
+                readOnly
+                value={shareUrl}
+                className="h-7 border-0 bg-transparent px-0 font-mono text-xs focus-visible:ring-0"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="xs"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <CheckIcon className="h-3.5 w-3.5 text-green-600" />
+                ) : (
+                  <CopyIcon className="h-3.5 w-3.5" />
+                )}
+                {t("workbench.shareDialog.copyLink")}
+              </Button>
+            </div>
+            <DialogFooter>
+              <Button type="button" onClick={handleDone}>
+                {t("workbench.uploadDialog.done")}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleUpload} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileChange}
+                disabled={busy}
+                className="file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground hover:file:opacity-90 block w-full text-xs text-muted-foreground"
+              />
+              {selectedFile && (
+                <div className="text-xs text-muted-foreground">
+                  {selectedFile.name} ({formatBytes(selectedFile.size)})
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-foreground">
+                {t("workbench.uploadDialog.expiration")}
+              </label>
+              <Select
+                value={expiresIn}
+                onValueChange={setExpiresIn}
+                disabled={busy}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {t(`workbench.presets.${opt}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {busy && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {calculating
+                      ? t("workbench.uploadDialog.calculating")
+                      : t("workbench.uploadDialog.progressBytes", {
+                          uploaded: formatBytes(uploadedBytes),
+                          total: formatBytes(totalBytes)
+                        })}
+                  </span>
+                  <span>{percent}%</span>
+                </div>
+                <Progress value={percent} className="h-2" />
               </div>
             )}
-          </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-medium text-foreground">
-              {t("workbench.uploadDialog.expiration")}
-            </label>
-            <Select
-              value={expiresIn}
-              onValueChange={setExpiresIn}
-              disabled={busy}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PRESET_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {t(`workbench.presets.${opt}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+            {error && <p className="text-xs text-destructive">{error}</p>}
 
-          {busy && (
-            <div className="flex flex-col gap-1.5">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>
-                  {calculating
-                    ? t("workbench.uploadDialog.calculating")
-                    : t("workbench.uploadDialog.progressBytes", {
-                        uploaded: formatBytes(uploadedBytes),
-                        total: formatBytes(totalBytes)
-                      })}
-                </span>
-                <span>{percent}%</span>
-              </div>
-              <Progress value={percent} className="h-2" />
-            </div>
-          )}
-
-          {error && <p className="text-xs text-destructive">{error}</p>}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancel}>
-              {t("common.actions.cancel")}
-            </Button>
-            <Button type="submit" disabled={busy || !selectedFile}>
-              {busy
-                ? t("common.actions.saving")
-                : t("workbench.uploadDialog.submit")}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCancel}>
+                {t("common.actions.cancel")}
+              </Button>
+              <Button type="submit" disabled={busy || !selectedFile}>
+                {busy
+                  ? t("common.actions.saving")
+                  : t("workbench.uploadDialog.submit")}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   )

@@ -230,6 +230,7 @@
       "never": "Never"
     },
     "presets": {
+      "file": "Follow file",
       "never": "Never",
       "1h": "1 hour",
       "24h": "24 hours",
@@ -249,7 +250,8 @@
       "progress": "Uploading {{percent}}%",
       "progressBytes": "{{uploaded}} / {{total}}",
       "submit": "Start upload",
-      "calculating": "Preparing upload…"
+      "calculating": "Preparing upload…",
+      "done": "Done"
     },
     "folderDialog": {
       "title": "New folder",
