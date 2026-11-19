@@ -198,6 +198,7 @@ pnpm check:deploy   # 先 build:web，再 wrangler deploy --dry-run（不联网�
 - `tag.yml` 推 tag 还用到仓库 secret `PAT_TOKEN`（有 repo 写权限的 PAT）；不手动打 tag 的项目可以不配。
 - `SETUP_SECRET` 与 `SIGNING_SECRET` 在同一层级必填：`scripts/materialize-secrets.mjs` 逐项校验，缺任一把、为空或仍是占位值就退出 1 并点名，**不生成 secrets.json、也不改动 wrangler.toml**。
 - `TABLE_PREFIX` 三态：未配置 / 空 → 项目默认前缀（`worker/src/config/defaults.json`，运行时补尾下划线）；CI 保留字 `none` → 无前缀；其他值 → 校验后原样注入。生效前缀必须在初始化前定死，初始化后换前缀会被前缀冲突守卫拦下。
+- 桶 CORS（R2 直传）：R2 直传桶必须配置 CORS（`AllowedOrigins`=站点源，如 `https://cbox.oneboy.app`；`AllowedMethods`=`PUT`；`AllowedHeaders`=`*`；`ExposeHeaders`=`ETag`；`MaxAgeSeconds`=`3600`），否则浏览器跨域 PUT 被拦（前端报「网络异常」、全程无进度）。当前生产 `cbox-files` 桶已配，新桶直传务必配。
 
 ### 部署流程
 
