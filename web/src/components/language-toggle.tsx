@@ -10,11 +10,9 @@ import {
 } from "@/lib/language"
 
 interface LanguagePickerProps {
-  /** 交给调用方接管写回（设置页等同步账号）；不传则只改本机选择。 */
   onChange?: (language: Language) => void
 }
 
-/** 当前语言与切换动作；语言状态读 i18next，选项由支持集驱动。 */
 function useLanguageChoice(onChange?: (language: Language) => void) {
   const { i18n } = useTranslation()
   const value = i18n.resolvedLanguage ?? i18n.language
@@ -24,7 +22,6 @@ function useLanguageChoice(onChange?: (language: Language) => void) {
     select: (next: Language) => {
       if (next === current) return
       if (onChange) {
-        // 立即生效，然后由调用方写回账号；写回失败也不回滚界面语言。
         void changeLanguage(next)
         onChange(next)
       } else {
@@ -34,7 +31,6 @@ function useLanguageChoice(onChange?: (language: Language) => void) {
   }
 }
 
-/** 未登录页的快捷切换：按支持集循环。 */
 export function LanguageCycleButton({ onChange }: LanguagePickerProps) {
   const { t } = useTranslation()
   const { current, select } = useLanguageChoice(onChange)

@@ -391,7 +391,6 @@ describe("系统管理", () => {
 })
 
 describe("用户管理操作列", () => {
-  // Radix 打开菜单时给 body 加 pointer-events: none，默认检查会拒绝点击。
   function menuUser() {
     return userEvent.setup({ pointerEventsCheck: 0 })
   }
@@ -463,7 +462,6 @@ describe("用户管理操作列", () => {
       expect(screen.queryByRole("menu")).not.toBeInTheDocument()
     )
 
-    // 待批准行：行内批准/拒绝照旧，菜单里没有停用/启用（启用会绕过审批）。
     const pendingMenu = await openMenu(user, "pending@example.com")
     expect(
       within(pendingMenu).getByRole("menuitem", { name: "重置密码" })
@@ -481,7 +479,6 @@ describe("用户管理操作列", () => {
     expect(screen.getByRole("button", { name: "批准" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument()
 
-    // 自己：隐藏停用与删除，重置密码与角色变更保留。
     const selfMenu = await openMenu(user, "owner@example.com")
     expect(
       within(selfMenu).getByRole("menuitem", { name: "重置密码" })
@@ -512,7 +509,7 @@ describe("用户管理操作列", () => {
     expect(await screen.findByText("temp-2026")).toBeInTheDocument()
     expect(adminApi.resetUserPassword).toHaveBeenCalledWith(2)
     expect(screen.getByRole("dialog")).toHaveTextContent("user@example.com")
-    // 重置不刷新列表：密码只回这一次。
+
     expect(adminApi.users).toHaveBeenCalledTimes(1)
 
     await user.click(screen.getByRole("button", { name: "关闭" }))
@@ -674,7 +671,6 @@ describe("用户管理操作列", () => {
     expect(within(dialog).getByText("用户限额")).toBeInTheDocument()
     expect(within(dialog).getByText(/user@example\.com/)).toBeInTheDocument()
 
-    // 填写限额覆盖
     const quotaInput = within(dialog).getByLabelText("总容量限额 (MB)")
     const singleInput = within(dialog).getByLabelText("单文件上限 (MB)")
     await user.type(quotaInput, "200")
@@ -688,7 +684,6 @@ describe("用户管理操作列", () => {
       })
     )
 
-    // 重新打开并清空覆盖
     const reopenMenu = await openMenu(user, "user@example.com")
     await user.click(within(reopenMenu).getByRole("menuitem", { name: "限额" }))
     const reopenDialog = await screen.findByRole("dialog")
@@ -744,7 +739,6 @@ describe("全局文件限额", () => {
       })
     )
 
-    // 验证回显值 500 MB，不再受平台硬顶钳制
     expect(singleInput).toHaveValue(500)
     expect(screen.queryByText(/受平台硬顶/)).not.toBeInTheDocument()
   })
@@ -771,42 +765,36 @@ describe("全局文件限额", () => {
     it("支持五 tab URL 直达、旧 ?tab= 重定向与未知子路径重定向", async () => {
       vi.mocked(adminApi.settings).mockResolvedValue(adminSettings())
 
-      // 1. 直达 /admin/registration
       const { unmount: unmount1 } = renderAdmin("/admin/registration")
       expect(
         await screen.findByRole("heading", { name: "注册与审核" })
       ).toBeInTheDocument()
       unmount1()
 
-      // 2. 直达 /admin/users
       const { unmount: unmount2 } = renderAdmin("/admin/users")
       expect(
         await screen.findByRole("heading", { name: "新建用户" })
       ).toBeInTheDocument()
       unmount2()
 
-      // 3. 直达 /admin/limits
       const { unmount: unmountLimits } = renderAdmin("/admin/limits")
       expect(
         await screen.findByRole("heading", { name: "文件限额（全局）" })
       ).toBeInTheDocument()
       unmountLimits()
 
-      // 4. 直达 /admin/database
       const { unmount: unmount3 } = renderAdmin("/admin/database")
       expect(
         await screen.findByRole("heading", { name: "数据库维护" })
       ).toBeInTheDocument()
       unmount3()
 
-      // 5. 旧路径 /admin/maintenance 重定向至 /admin/database
       const { unmount: unmountLegacy } = renderAdmin("/admin/maintenance")
       expect(
         await screen.findByRole("heading", { name: "数据库维护" })
       ).toBeInTheDocument()
       unmountLegacy()
 
-      // 6. 旧 query 兼容：/admin?tab=maintenance 重定向至 /admin/database
       const { unmount: unmountQueryMaint } = renderAdmin(
         "/admin?tab=maintenance"
       )
@@ -815,21 +803,18 @@ describe("全局文件限额", () => {
       ).toBeInTheDocument()
       unmountQueryMaint()
 
-      // 7. 旧 query 兼容：/admin?tab=limits 直通 /admin/limits
       const { unmount: unmountQueryLimits } = renderAdmin("/admin?tab=limits")
       expect(
         await screen.findByRole("heading", { name: "文件限额（全局）" })
       ).toBeInTheDocument()
       unmountQueryLimits()
 
-      // 8. 裸路径 /admin 自动重定向至首 tab /admin/email
       const { unmount: unmount4 } = renderAdmin("/admin")
       expect(
         await screen.findByRole("heading", { name: "邮件配置" })
       ).toBeInTheDocument()
       unmount4()
 
-      // 9. 未知子路径 /admin/invalid 自动重定向至首 tab /admin/email
       renderAdmin("/admin/invalid")
       expect(
         await screen.findByRole("heading", { name: "邮件配置" })
@@ -844,22 +829,19 @@ describe("全局文件限额", () => {
       const hostInput = await screen.findByLabelText("服务器")
       await user.type(hostInput, "-changed")
 
-      // 尝试切换到「注册与审核」Tab
       await user.click(screen.getByRole("tab", { name: "注册与审核" }))
 
-      // 弹出未保存修改对话框
       const dialog = await screen.findByRole("dialog")
       expect(dialog).toHaveTextContent("未保存的修改")
       expect(dialog).toHaveTextContent(
         "当前有未保存的修改，离开将丢失内容，是否继续？"
       )
 
-      // 点击「留在本页」
       await user.click(within(dialog).getByRole("button", { name: "留在本页" }))
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
       })
-      // 仍然留在邮件配置，且输入保留
+
       expect(screen.getByLabelText("服务器")).toHaveValue(
         "smtp.example.com-changed"
       )
@@ -867,14 +849,12 @@ describe("全局文件限额", () => {
         screen.queryByRole("heading", { name: "注册与审核" })
       ).not.toBeInTheDocument()
 
-      // 再次尝试切换并点击「放弃修改」
       await user.click(screen.getByRole("tab", { name: "注册与审核" }))
       const discardDialog = await screen.findByRole("dialog")
       await user.click(
         within(discardDialog).getByRole("button", { name: "放弃修改" })
       )
 
-      // 成功切到「注册与审核」
       expect(
         await screen.findByRole("heading", { name: "注册与审核" })
       ).toBeInTheDocument()
@@ -888,28 +868,23 @@ describe("全局文件限额", () => {
       const emailInput = await screen.findByLabelText("邮箱")
       await user.type(emailInput, "draft@example.com")
 
-      // 尝试切换到「邮件配置」Tab
       await user.click(screen.getByRole("tab", { name: "邮件配置" }))
 
-      // 弹出未保存拦截弹窗
       const dialog = await screen.findByRole("dialog")
       expect(dialog).toHaveTextContent("未保存的修改")
 
-      // 点击「留在本页」
       await user.click(within(dialog).getByRole("button", { name: "留在本页" }))
       expect(screen.getByLabelText("邮箱")).toHaveValue("draft@example.com")
       expect(
         screen.queryByRole("heading", { name: "邮件配置" })
       ).not.toBeInTheDocument()
 
-      // 再次尝试切换并选择「放弃修改」
       await user.click(screen.getByRole("tab", { name: "邮件配置" }))
       const discardDialog = await screen.findByRole("dialog")
       await user.click(
         within(discardDialog).getByRole("button", { name: "放弃修改" })
       )
 
-      // 成功切换至邮件配置
       expect(
         await screen.findByRole("heading", { name: "邮件配置" })
       ).toBeInTheDocument()
@@ -924,28 +899,23 @@ describe("全局文件限额", () => {
       await user.clear(quotaInput)
       await user.type(quotaInput, "999")
 
-      // 尝试切换到「邮件配置」Tab
       await user.click(screen.getByRole("tab", { name: "邮件配置" }))
 
-      // 弹出未保存拦截弹窗
       const dialog = await screen.findByRole("dialog")
       expect(dialog).toHaveTextContent("未保存的修改")
 
-      // 点击「留在本页」
       await user.click(within(dialog).getByRole("button", { name: "留在本页" }))
       expect(screen.getByLabelText("默认总容量 (MB)")).toHaveValue(999)
       expect(
         screen.queryByRole("heading", { name: "邮件配置" })
       ).not.toBeInTheDocument()
 
-      // 再次尝试切换并选择「放弃修改」
       await user.click(screen.getByRole("tab", { name: "邮件配置" }))
       const discardDialog = await screen.findByRole("dialog")
       await user.click(
         within(discardDialog).getByRole("button", { name: "放弃修改" })
       )
 
-      // 成功切换至邮件配置
       expect(
         await screen.findByRole("heading", { name: "邮件配置" })
       ).toBeInTheDocument()

@@ -11,10 +11,6 @@ import { describeApiError } from "@/lib/api-errors"
 import type { AdminSettings } from "@/lib/api-types"
 import { validateLimitMB } from "@/lib/limits"
 
-/**
- * 系统管理 · 文件限额（规格 §4、§7）。
- * 全局默认总容量与单文件上限配置（填多少生效多少，无平台硬顶钳制）。
- */
 export function FileLimitsSection(props?: {
   settings?: AdminSettings
   onSaved?: (settings: AdminSettings) => void

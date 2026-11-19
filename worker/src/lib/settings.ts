@@ -8,8 +8,7 @@
 import {
   APP_MODE,
   PROJECT_NAME,
-  PROJECT_REPOSITORY_URL,
-  PROJECT_TAGLINE
+  PROJECT_REPOSITORY_URL
 } from "../config/project"
 import { isSigningSecretConfigured } from "../core/auth"
 import { getSetting, isSetupPageEnabled, setSetting } from "./setup"
@@ -160,7 +159,6 @@ export async function writeProfileLockSettings(
 /** 公开引导端点：只放公开、非敏感事实，一个请求够前端首屏用。 */
 export interface PublicBootstrap {
   name: string
-  tagline: string
   repositoryUrl: string
   version: string
   appMode: typeof APP_MODE
@@ -172,7 +170,6 @@ export async function buildPublicBootstrap(env: Env): Promise<PublicBootstrap> {
   const registration = await readRegistrationSettings(env)
   return {
     name: PROJECT_NAME,
-    tagline: PROJECT_TAGLINE,
     repositoryUrl: PROJECT_REPOSITORY_URL,
     version: (env.APP_VERSION ?? "").trim() || UNKNOWN_VERSION,
     appMode: APP_MODE,

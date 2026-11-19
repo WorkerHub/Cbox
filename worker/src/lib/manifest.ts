@@ -5,7 +5,7 @@
  * 图标是随仓提交的静态 PNG（scripts/export-pwa-icons.mjs 按 site-logo.tsx 的菱形环
  * 几何导出，见 web/public/icons/），路径走 ASSETS 静态服务。
  */
-import { PROJECT_NAME, PROJECT_TAGLINE } from "../config/project"
+import { PROJECT_NAME } from "../config/project"
 
 export interface ManifestIcon {
   src: string
@@ -34,7 +34,7 @@ export function buildWebAppManifest(): WebAppManifest {
     id: "/",
     name: PROJECT_NAME,
     short_name: PROJECT_NAME,
-    description: PROJECT_TAGLINE,
+    description: PROJECT_NAME,
     start_url: "/",
     display: "standalone",
     background_color: THEME_COLOR,

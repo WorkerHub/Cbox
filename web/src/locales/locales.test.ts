@@ -2,15 +2,6 @@ import { describe, expect, it } from "vitest"
 import en from "@/locales/en.json"
 import zh from "@/locales/zh.json"
 
-/**
- * 语言资源自身的守卫（规格 §6.5、§7.10）：
- * - 两种语言的 key 集合一致（复数后缀按语言不同，只比基底）；
- * - 没有空值，免得界面上出现空白；
- * - 英文资源里不允许残留中文（`common.languages.*` 是语言自称，本来就该是各自语言）。
- *
- * 漏翻一个 key 时 i18next 会回落到中文，界面上就会冒出中文——这里是第一道拦截。
- */
-
 type Bundle = { [key: string]: string | Bundle }
 
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/

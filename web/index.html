@@ -11,9 +11,6 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>Cbox</title>
     <script>
-      // 首屏主题落定（规格 §6.2）：必须在样式表与包体之前跑完，否则暗色用户
-      // 会看到一帧白屏。键与 web/src/lib/theme.ts 的 THEME_STORAGE_KEY 一致，
-      // 取值兼容 zustand persist 的 {state:{theme}} 与裸字符串。
       ;(() => {
         const root = document.documentElement
         const meta = document.querySelector('meta[name="theme-color"]')
@@ -27,9 +24,7 @@
               theme = stored
             }
           }
-        } catch {
-          // localStorage 被禁用时按系统外观走，不阻塞渲染
-        }
+        } catch {}
         if (theme !== "light" && theme !== "dark") theme = "auto"
         const dark =
           theme === "dark" ||

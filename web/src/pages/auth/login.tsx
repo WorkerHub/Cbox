@@ -24,15 +24,6 @@ type Step =
   | { kind: "email"; tempToken: string; methods: TwoFactorMethod[] }
   | { kind: "verify"; email: string }
 
-/**
- * 登录页（技术方案 §5B、规格 §6.1）：密码步 → 验证码步。
- *
- * 两条硬要求：
- * - 换步必须换 DOM 节点：两步的 `<form>` 与关键 input 带不同 `key`，防止
- *   密码管理器把第一步密码框就地改写成验证码框（§5B 补注）；
- * - 密码框独占 `type="password"`；验证码框 `type="text"` + `one-time-code` +
- *   `inputmode="numeric"`，name/id 不含 password。
- */
 export function LoginPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -65,7 +56,6 @@ export function LoginPage() {
     await applyAccountLanguage(user.language)
     const returnTo = from && from !== "/login" ? from : undefined
     if (user.mustChangePassword) {
-      // 首登强制改密：把原目标带到改密页，改完再回去。
       navigate("/change-password", {
         replace: true,
         state: returnTo ? { from: returnTo } : undefined

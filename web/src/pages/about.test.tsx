@@ -11,7 +11,6 @@ describe("关于页", () => {
     useSiteStore.setState({
       info: publicInfo({
         name: PROJECT_NAME,
-        tagline: "A thin skeleton",
         repositoryUrl: "https://example.com/template"
       }),
       loaded: true
@@ -24,7 +23,6 @@ describe("关于页", () => {
       </>
     )
 
-    // 页脚与关于页都来自同一个构建常量
     expect(screen.getByText(buildInfo.version)).toBeInTheDocument()
     expect(
       screen.getByText(

@@ -11,7 +11,6 @@ import {
 import { useResolvedTheme } from "@/hooks/use-theme"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  // 主题跟随生效档位（访客本机偏好，缺省跟随系统），由 ThemeProvider 解析成 light/dark。
   const theme: ToasterProps["theme"] = useResolvedTheme()
 
   return (

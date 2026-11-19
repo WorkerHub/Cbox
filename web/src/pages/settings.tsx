@@ -2,10 +2,6 @@ import { useTranslation } from "react-i18next"
 import { NavLink, Outlet, useLocation } from "react-router"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-/**
- * 设置页（技术方案 §5A.3）：安全与偏好两项；个人资料是独立页 `/profile`。
- * 现已重构为路径段独立子路由，不使用 query 参数或页内状态切换。
- */
 export function SettingsPage() {
   const { t } = useTranslation()
   const location = useLocation()

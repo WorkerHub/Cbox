@@ -8,12 +8,6 @@ import {
 } from "@/lib/build-info"
 import { useSiteStore } from "@/stores/site"
 
-/**
- * 关于页（技术方案 §5A.3）：项目说明、实际技术栈、开源地址、构建信息。
- *
- * 版本号与页脚同源（`lib/build-info`），构建日期/时间由构建脚本从 git 生成，
- * 源码里没有写死值。名称与仓库地址来自身份单点（经 /api/public）。
- */
 export function AboutPage() {
   const { t } = useTranslation()
   const info = useSiteStore((state) => state.info)
@@ -29,7 +23,6 @@ export function AboutPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       <section className="space-y-2 rounded-xl border bg-card p-4 text-sm">
         <h2 className="font-heading text-base font-semibold">{info?.name}</h2>
-        <p className="text-muted-foreground">{info?.tagline}</p>
         {info?.repositoryUrl ? (
           <a
             href={info.repositoryUrl}

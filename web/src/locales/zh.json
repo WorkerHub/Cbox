@@ -267,7 +267,6 @@
       "sha256": "文件 SHA-256",
       "copySha256": "复制 SHA-256",
       "existingShares": "已有分享",
-      "suffix": "尾号 {{suffix}}",
       "downloads": "{{count}} 次下载",
       "noDownloads": "0 次下载",
       "revoked": "已撤销",

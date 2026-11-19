@@ -10,7 +10,6 @@ const THEME_ICONS = {
   dark: MoonIcon
 } as const
 
-/** 顶栏与未登录页的主题循环按钮：自动 → 亮 → 暗 → 自动，只改本机偏好。 */
 export function ThemeCycleButton() {
   const { t } = useTranslation()
   const theme = useThemeStore((state) => state.theme)

@@ -3,10 +3,6 @@ import { applyAccountLanguage } from "@/i18n"
 import { authApi, meApi } from "@/lib/api"
 import type { Me } from "@/lib/api-types"
 
-/**
- * 会话与当前用户。`status: "loading"` 表示还没问过 `/api/me`，`ready` 表示已有
- * 结论（可能是未登录）。会话 Cookie 是 HttpOnly，前端只读 `/api/me` 的结果。
- */
 interface AuthState {
   user: Me | null
   status: "loading" | "ready"
@@ -47,9 +43,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       await authApi.logout()
-    } catch {
-      // 网络断了也清本地状态，不把用户卡在假登录态
-    }
+    } catch {}
     set({ user: null, status: "ready" })
   }
 }))

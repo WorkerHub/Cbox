@@ -1,15 +1,7 @@
-/**
- * 前后端接口契约的 DTO（与单 B 冻结的形态一致）。
- *
- * 只放 wire 形状；页面自己的视图状态不进这里。所有时间为 ISO 字符串。
- */
-
 export type AppMode = "multi" | "single"
 
-/** GET /api/public：公开数据，可缓存。 */
 export interface PublicInfo {
   name: string
-  tagline: string
   repositoryUrl: string
   version: string
   appMode: AppMode
@@ -17,7 +9,6 @@ export interface PublicInfo {
   emailConfigured: boolean
 }
 
-/** GET /api/setup/state：不含任何密钥/哈希。 */
 export interface SetupState {
   enabled: boolean
   ownerExists: boolean
@@ -53,14 +44,14 @@ export interface Me {
   role: UserRole
   status: "active" | "pending" | "disabled"
   emailVerified: boolean
-  /** 首次登录强制改密（管理员建号等场景）；true 时前端引导强制改密后再放行。 */
+
   mustChangePassword: boolean
   language: string
   timezone: string
   totpEnabled: boolean
   emailTwoFactorEnabled: boolean
   passkeyCount: number
-  /** 个人资料修改锁（后端强制拦截的开关状态，前端据此灰掉编辑按钮）。 */
+
   profileLocks: {
     displayNameLocked: boolean
   }
@@ -94,7 +85,7 @@ export interface SmtpSettings {
   host: string
   port: string
   username: string
-  /** 只读：是否已保存过密码；保存时 password 留空表示不改。 */
+
   passwordSet: boolean
   from: string
   fromName: string
@@ -127,7 +118,6 @@ export interface FileLimitSettings {
 }
 
 export interface AdminSettings {
-  /** 单人档不涉及注册：整个段为 null，页面据此隐藏。 */
   registration: RegistrationSettings | null
   profileLocks: {
     displayNameLocked: boolean
@@ -142,7 +132,7 @@ export interface SmtpUpdateInput {
   host: string
   port: string
   username: string
-  /** 留空 = 不修改已保存的密码。 */
+
   password?: string
   from: string
   fromName: string
@@ -151,7 +141,7 @@ export interface SmtpUpdateInput {
 export interface ResendUpdateInput {
   from: string
   fromName: string
-  /** 留空 = 不修改已保存的 key。 */
+
   apiKey?: string
 }
 
@@ -183,7 +173,6 @@ export interface UserLimitsSummary {
   effectiveSingleMaxMB: number
 }
 
-/** GET /api/admin/users 列表项：全量用户（`?status=pending` 时为其中待批准子集）。 */
 export interface AdminUser {
   id: number
   email: string
@@ -204,47 +193,40 @@ export interface UserLimitsUpdateInput {
   singleMaxMB?: number | null | ""
 }
 
-/** POST /api/admin/users：管理员手动新建用户（后端生成一次性初始密码）。 */
 export interface AdminCreateUserInput {
   email: string
   role: UserRole
-  /** 缺省 ''。 */
+
   displayName?: string
-  /** 缺省 'zh'。 */
+
   language?: string
-  /** IANA 时区，缺省 'Asia/Shanghai'。 */
+
   timezone?: string
 }
 
-/** POST /api/admin/users 响应：直接激活；一次性密码仅此响应返回。 */
 export interface AdminCreateUserResult {
   id: number
   email: string
   role: UserRole
   status: "active"
-  /** 系统生成的一次性初始密码，仅本次响应返回，之后任何接口不回显、不落明文库。 */
+
   temporaryPassword: string
 }
 
-/** POST /api/admin/users/:id/reset-password：管理员重置密码，返回新一次性密码。 */
 export interface AdminResetPasswordResult {
   id: number
   email: string
-  /** 系统生成的一次性初始密码，仅本次响应返回，之后任何接口不回显、不落明文库。 */
+
   temporaryPassword: string
 }
 
-/** POST /api/admin/users/:id/role：变更角色（普通用户 ↔ 管理员）。 */
 export interface AdminChangeRoleInput {
   role: UserRole
 }
 
-/** 停用 / 启用 / 变更角色 / 删除用户成功时的统一结果。 */
 export interface AdminUserActionResult {
   success: true
 }
-
-/* 业务：文件管理与分享（规格 §5、§6、§7、§10） */
 
 export interface UsageInfo {
   usedBytes: number
@@ -274,7 +256,7 @@ export interface FileItem {
   expiresAt: string | null
   createdAt: string
   expired: boolean
-  /** 上传完成响应专属：自动创建的分享（明文令牌仅此一次，其余列表接口不回显）。 */
+
   share?: {
     token: string
     expiresAt: string | null
@@ -292,7 +274,7 @@ export interface FolderListResponse {
 export interface ShareItem {
   id: string
   fileId: string
-  tokenSuffix: string
+  token: string | null
   expiresAt: string | null
   downloadCount: number
   lastDownloadedAt: string | null
@@ -304,7 +286,7 @@ export interface CreateShareResult {
   id: string
   url: string
   expires_at: string | null
-  tokenSuffix: string
+  token: string | null
 }
 
 export interface DeleteFolderResult {

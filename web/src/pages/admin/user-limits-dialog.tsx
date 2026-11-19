@@ -57,7 +57,6 @@ export function UserLimitsDialog({
     setLoading(true)
     setError("")
 
-    // 优先读取现有带出的 limits，同时异步获取最新数据
     if (user.limits) {
       setQuotaMB(user.limits.quotaMB != null ? String(user.limits.quotaMB) : "")
       setSingleMaxMB(

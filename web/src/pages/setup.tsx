@@ -14,17 +14,6 @@ import type { SetupResult } from "@/lib/api-types"
 import { useSetupStore } from "@/stores/setup"
 import { useSiteStore } from "@/stores/site"
 
-/**
- * 初始化页（规格 §5.3、§5.3.7；技术方案 §5A.6）。
- *
- * 三种形态：
- * - 还没有 owner（未初始化）：初始化形态（防自锁——页面开关关着也放行）；
- * - 已初始化且页面开启：升级形态，只跑幂等迁移；
- * - 已初始化且页面关闭：只显示提示，DOM 里没有密钥表单。
- *
- * 密钥只走 `X-Setup-Secret` 请求头，输入框 id/name 固定 `setup-secret`、
- * autocomplete 关闭、提交后立即清空；两种形态用不同 `key` 强制换 DOM 节点。
- */
 export function SetupPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -35,7 +24,7 @@ export function SetupPage() {
   const singleMode = info?.appMode === "single"
 
   const [secret, setSecret] = useState("")
-  /** 初始化成功后建所有者还要用一次密钥：只留在内存，不回填输入框。 */
+
   const [pendingSecret, setPendingSecret] = useState("")
   const [ownerEmail, setOwnerEmail] = useState("")
   const [ownerPassword, setOwnerPassword] = useState("")
