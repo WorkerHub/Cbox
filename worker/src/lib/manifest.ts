@@ -18,7 +18,7 @@ export interface WebAppManifest {
   id: string
   name: string
   short_name: string
-  description: string
+  description?: string
   start_url: string
   display: string
   background_color: string
@@ -34,7 +34,6 @@ export function buildWebAppManifest(): WebAppManifest {
     id: "/",
     name: PROJECT_NAME,
     short_name: PROJECT_NAME,
-    description: PROJECT_NAME,
     start_url: "/",
     display: "standalone",
     background_color: THEME_COLOR,

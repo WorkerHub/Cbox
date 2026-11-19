@@ -286,7 +286,7 @@ export interface CreateShareResult {
   id: string
   url: string
   expires_at: string | null
-  token: string | null
+  tokenSuffix: string
 }
 
 export interface DeleteFolderResult {

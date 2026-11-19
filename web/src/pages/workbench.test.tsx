@@ -159,7 +159,7 @@ describe("WorkbenchPage", () => {
       id: "s2",
       url: "https://example.com/s/secret-token-1234",
       expires_at: futureIso(48),
-      token: "secret-token-1234"
+      tokenSuffix: "1234"
     })
 
     render(
