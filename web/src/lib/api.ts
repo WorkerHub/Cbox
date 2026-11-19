@@ -15,7 +15,6 @@ import type {
   LoginResult,
   Me,
   MeUpdateInput,
-  MigrationResult,
   PasskeySummary,
   PublicInfo,
   RegisterResult,
@@ -263,10 +262,6 @@ export const meApi = {
   usage: () => request<UsageInfo>("/me/usage")
 }
 
-export interface AdminSetupResult extends SetupResult {
-  migrations: MigrationResult[]
-}
-
 export const adminApi = {
   settings: () => request<AdminSettings>("/admin/settings"),
 
@@ -331,9 +326,7 @@ export const adminApi = {
         method: "PUT",
         body: input
       }
-    ),
-
-  runSetup: () => request<AdminSetupResult>("/admin/setup", { method: "POST" })
+    )
 }
 
 export const foldersApi = {

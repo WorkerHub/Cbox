@@ -1,6 +1,8 @@
 /**
  * 迁移的唯一定义处：单一基线 `schema_v1`（历史增量 schema_v1..v6 坍缩）。
  *
+ * 舰队标准口径：迁移一律 schema_vN、基线恒 schema_v1、新增递增编号、取代功能名式。
+ *
  * - 全新库：`schema_v1` 的 sql 按 schema.ts 的定版 DDL 一次建出全部表与索引即最终形态。
  * - 生产库：已有 v1..v6 历史记录的生产库由执行器只读识别为已最新（账本已有 schema_v1，
  *   直接 skipped），不重跑、不报错、不写任何数据（含账本）。
@@ -27,10 +29,6 @@ export interface Migration {
 
 /** 唯一基线迁移名（坍缩为单一 V1）。 */
 export const BASELINE_MIGRATION = "schema_v1"
-/** 直传上传增量迁移（为 files 表补充 status 与 upload_id 列）。 */
-export const FILES_UPLOADS_MIGRATION = "files_uploads_v1"
-/** 分享明文令牌增量迁移（为 shares 表补充 token 列）。 */
-export const SHARES_TOKEN_MIGRATION = "shares_token_v1"
 
 export function getMigrations(prefix: string): Migration[] {
   const statements = baselineStatements(prefix)
@@ -52,44 +50,5 @@ export function getMigrations(prefix: string): Migration[] {
     }
   }
 
-  return [
-    { name: BASELINE_MIGRATION, sql },
-    {
-      name: FILES_UPLOADS_MIGRATION,
-      sql: "",
-      prepare: async (ctx) => {
-        const t = tableName(ctx.prefix, "files")
-        const cols = await ctx.db
-          .prepare(`PRAGMA table_info(${t})`)
-          .all<{ name: string }>()
-        const has = (n: string) => cols.results.some((c) => c.name === n)
-        if (!has("status")) {
-          await ctx.db
-            .prepare(
-              `ALTER TABLE ${t} ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`
-            )
-            .run()
-        }
-        if (!has("upload_id")) {
-          await ctx.db
-            .prepare(`ALTER TABLE ${t} ADD COLUMN upload_id TEXT`)
-            .run()
-        }
-      }
-    },
-    {
-      name: SHARES_TOKEN_MIGRATION,
-      sql: "",
-      prepare: async (ctx) => {
-        const t = tableName(ctx.prefix, "shares")
-        const cols = await ctx.db
-          .prepare(`PRAGMA table_info(${t})`)
-          .all<{ name: string }>()
-        const has = (n: string) => cols.results.some((c) => c.name === n)
-        if (!has("token")) {
-          await ctx.db.prepare(`ALTER TABLE ${t} ADD COLUMN token TEXT`).run()
-        }
-      }
-    }
-  ]
+  return [{ name: BASELINE_MIGRATION, sql }]
 }
