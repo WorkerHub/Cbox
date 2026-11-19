@@ -153,26 +153,45 @@ export async function checkFileNameConflict(
   prefix: string,
   userId: number,
   folderId: string | null,
-  name: string
+  name: string,
+  excludeFileId?: string
 ): Promise<boolean> {
   const statement =
     folderId === null
-      ? db
-          .prepare(
-            `SELECT 1 AS exists_row
-               FROM ${filesTable(prefix)}
-              WHERE user_id = ? AND folder_id IS NULL AND name = ? COLLATE NOCASE
-              LIMIT 1`
-          )
-          .bind(userId, name)
-      : db
-          .prepare(
-            `SELECT 1 AS exists_row
-               FROM ${filesTable(prefix)}
-              WHERE user_id = ? AND folder_id = ? AND name = ? COLLATE NOCASE
-              LIMIT 1`
-          )
-          .bind(userId, folderId, name)
+      ? excludeFileId
+        ? db
+            .prepare(
+              `SELECT 1 AS exists_row
+                 FROM ${filesTable(prefix)}
+                WHERE user_id = ? AND folder_id IS NULL AND name = ? COLLATE NOCASE AND id != ?
+                LIMIT 1`
+            )
+            .bind(userId, name, excludeFileId)
+        : db
+            .prepare(
+              `SELECT 1 AS exists_row
+                 FROM ${filesTable(prefix)}
+                WHERE user_id = ? AND folder_id IS NULL AND name = ? COLLATE NOCASE
+                LIMIT 1`
+            )
+            .bind(userId, name)
+      : excludeFileId
+        ? db
+            .prepare(
+              `SELECT 1 AS exists_row
+                 FROM ${filesTable(prefix)}
+                WHERE user_id = ? AND folder_id = ? AND name = ? COLLATE NOCASE AND id != ?
+                LIMIT 1`
+            )
+            .bind(userId, folderId, name, excludeFileId)
+        : db
+            .prepare(
+              `SELECT 1 AS exists_row
+                 FROM ${filesTable(prefix)}
+                WHERE user_id = ? AND folder_id = ? AND name = ? COLLATE NOCASE
+                LIMIT 1`
+            )
+            .bind(userId, folderId, name)
 
   const row = await statement.first<{ exists_row: number }>()
   return row !== null
@@ -258,27 +277,53 @@ export async function deleteFileRecord(
   return result.meta.changes > 0
 }
 
-export async function updateFileExpiration(
+export interface UpdateFileInput {
+  name?: string
+  folderId?: string | null
+  expiresAt?: string | null
+}
+
+export async function updateFileRecord(
   db: D1Database,
   prefix: string,
   userId: number,
   fileId: string,
-  newExpiresAt: string | null
+  patch: UpdateFileInput
 ): Promise<FileRow | null> {
   const file = await findFileById(db, prefix, userId, fileId)
   if (!file) return null
 
-  await db
-    .prepare(
-      `UPDATE ${filesTable(prefix)}
-          SET expires_at = ?
-        WHERE id = ? AND user_id = ?`
-    )
-    .bind(newExpiresAt, fileId, userId)
-    .run()
+  const assignments: string[] = []
+  const values: Array<string | number | null> = []
+
+  if (patch.name !== undefined) {
+    assignments.push("name = ?")
+    values.push(patch.name)
+  }
+
+  if (patch.folderId !== undefined) {
+    assignments.push("folder_id = ?")
+    values.push(patch.folderId)
+  }
+
+  if (patch.expiresAt !== undefined) {
+    assignments.push("expires_at = ?")
+    values.push(patch.expiresAt)
+  }
+
+  if (assignments.length > 0) {
+    await db
+      .prepare(
+        `UPDATE ${filesTable(prefix)}
+            SET ${assignments.join(", ")}
+          WHERE id = ? AND user_id = ?`
+      )
+      .bind(...values, fileId, userId)
+      .run()
+  }
 
   // 若缩短了过期时间，同步截断越过新到期时间的分享行（规格 §5.4 / §6）
-  if (newExpiresAt !== null) {
+  if (patch.expiresAt !== undefined && patch.expiresAt !== null) {
     await db
       .prepare(
         `UPDATE ${sharesTable(prefix)}
@@ -286,9 +331,21 @@ export async function updateFileExpiration(
           WHERE file_id = ?
             AND (expires_at IS NULL OR expires_at > ?)`
       )
-      .bind(newExpiresAt, fileId, newExpiresAt)
+      .bind(patch.expiresAt, fileId, patch.expiresAt)
       .run()
   }
 
   return await findFileById(db, prefix, userId, fileId)
+}
+
+export async function updateFileExpiration(
+  db: D1Database,
+  prefix: string,
+  userId: number,
+  fileId: string,
+  newExpiresAt: string | null
+): Promise<FileRow | null> {
+  return await updateFileRecord(db, prefix, userId, fileId, {
+    expiresAt: newExpiresAt
+  })
 }

@@ -12,9 +12,9 @@ import {
   isFileExpired,
   isValidExpiresInPreset,
   toFileView,
-  updateFileExpiration
+  updateFileRecord
 } from "../db/queries/files"
-import { findFolderById } from "../db/queries/folders"
+import { findFolderById, isValidFolderName } from "../db/queries/folders"
 import { createShareRecord, listSharesByFile } from "../db/queries/shares"
 import {
   completeFileUpload,
@@ -526,18 +526,120 @@ fileRoutes.patch("/:id", async (c) => {
   const prefix = getTablePrefix(c.env)
   const fileId = c.req.param("id")?.trim()
 
-  const body = await readJsonBody<{ expiresIn?: unknown }>(c)
+  if (!fileId) {
+    return apiError(c, 404, "FILE_NOT_FOUND", "File not found")
+  }
+
+  const body = await readJsonBody<{
+    name?: unknown
+    folderId?: unknown
+    expiresIn?: unknown
+  }>(c)
   if (!body) {
     return apiError(c, 400, "INVALID_REQUEST", "Invalid request body")
   }
 
-  let preset: string | null = null
-  if (typeof body.expiresIn === "string") {
-    if (
-      body.expiresIn !== "" &&
-      body.expiresIn !== "never" &&
-      !isValidExpiresInPreset(body.expiresIn)
-    ) {
+  const hasName = body.name !== undefined
+  const hasFolderId = body.folderId !== undefined
+  const hasExpiresIn = body.expiresIn !== undefined
+
+  if (!hasName && !hasFolderId && !hasExpiresIn) {
+    return apiError(
+      c,
+      400,
+      "INVALID_REQUEST",
+      "At least one field (name, folderId, expiresIn) is required"
+    )
+  }
+
+  const file = await findFileById(c.env.DB, prefix, userId, fileId)
+  if (!file) {
+    return apiError(c, 404, "FILE_NOT_FOUND", "File not found")
+  }
+
+  let targetFolderId: string | null = file.folder_id
+  if (hasFolderId) {
+    if (body.folderId === null) {
+      targetFolderId = null
+    } else if (typeof body.folderId === "string") {
+      const trimmedFolderId = body.folderId.trim()
+      if (!trimmedFolderId) {
+        targetFolderId = null
+      } else {
+        const folder = await findFolderById(
+          c.env.DB,
+          prefix,
+          userId,
+          trimmedFolderId
+        )
+        if (!folder) {
+          return apiError(c, 404, "FOLDER_NOT_FOUND", "Folder not found")
+        }
+        targetFolderId = trimmedFolderId
+      }
+    } else {
+      return apiError(
+        c,
+        400,
+        "INVALID_REQUEST",
+        "folderId must be a string or null"
+      )
+    }
+  }
+
+  let targetName = file.name
+  if (hasName) {
+    if (typeof body.name !== "string" || !isValidFolderName(body.name)) {
+      return apiError(
+        c,
+        400,
+        "INVALID_FILENAME",
+        "File name must be between 1 and 255 characters and cannot contain slashes"
+      )
+    }
+    targetName = body.name.trim()
+  }
+
+  if (hasName || hasFolderId) {
+    const isConflict = await checkFileNameConflict(
+      c.env.DB,
+      prefix,
+      userId,
+      targetFolderId,
+      targetName,
+      file.id
+    )
+    if (isConflict) {
+      return apiError(
+        c,
+        409,
+        "FILE_NAME_CONFLICT",
+        "A file with the same name already exists in this folder"
+      )
+    }
+  }
+
+  let newExpiresAt: string | null | undefined
+  if (hasExpiresIn) {
+    let preset: string | null = null
+    if (typeof body.expiresIn === "string") {
+      const trimmed = body.expiresIn.trim()
+      if (
+        trimmed !== "" &&
+        trimmed !== "never" &&
+        !isValidExpiresInPreset(trimmed)
+      ) {
+        return apiError(
+          c,
+          400,
+          "INVALID_EXPIRES_IN",
+          "Invalid expiration preset (allowed: never, 1h, 24h, 7d, 30d)"
+        )
+      }
+      preset = trimmed === "" ? null : trimmed
+    } else if (body.expiresIn === null) {
+      preset = null
+    } else {
       return apiError(
         c,
         400,
@@ -545,26 +647,20 @@ fileRoutes.patch("/:id", async (c) => {
         "Invalid expiration preset (allowed: never, 1h, 24h, 7d, 30d)"
       )
     }
-    preset = body.expiresIn
+    newExpiresAt = calculateExpiresAt(preset)
   }
 
-  const newExpiresAt = calculateExpiresAt(preset)
-  const updated = await updateFileExpiration(
-    c.env.DB,
-    prefix,
-    userId,
-    fileId,
-    newExpiresAt
-  )
+  const updated = await updateFileRecord(c.env.DB, prefix, userId, fileId, {
+    ...(hasName ? { name: targetName } : {}),
+    ...(hasFolderId ? { folderId: targetFolderId } : {}),
+    ...(hasExpiresIn ? { expiresAt: newExpiresAt } : {})
+  })
 
   if (!updated) {
     return apiError(c, 404, "FILE_NOT_FOUND", "File not found")
   }
 
-  return c.json({
-    id: updated.id,
-    expiresAt: updated.expires_at
-  })
+  return c.json(toFileView(updated))
 })
 
 fileRoutes.post("/:id/shares", async (c) => {
