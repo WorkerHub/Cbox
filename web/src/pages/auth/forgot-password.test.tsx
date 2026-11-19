@@ -39,7 +39,6 @@ describe("找回密码", () => {
     await user.type(screen.getByLabelText("邮箱"), "owner@example.com")
     await user.click(screen.getByRole("button", { name: "发送验证码" }))
 
-    // 防枚举：无论邮箱是否存在，界面都只说「已发送」。
     expect(
       await screen.findByText("如果该邮箱已注册，验证码已发送。")
     ).toBeInTheDocument()

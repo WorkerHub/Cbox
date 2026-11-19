@@ -4,9 +4,6 @@ import { ThemeCycleButton } from "@/components/theme-toggle"
 import { buildInfo } from "@/lib/build-info"
 import { useSiteStore } from "@/stores/site"
 
-/**
- * 无导航页面的统一外壳：登录、注册、找回密码、首登强制改密。
- */
 export function AuthShell({
   title,
   subtitle,

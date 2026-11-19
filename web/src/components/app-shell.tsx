@@ -74,7 +74,6 @@ const SIDEBAR_ITEMS = [
   }
 ] as const
 
-/** 头像下拉里的页面入口；系统管理仍只对管理员显示。 */
 const ACCOUNT_ITEMS = [
   { to: "/profile", labelKey: "profile.title", icon: UserIcon },
   {
@@ -87,7 +86,6 @@ const ACCOUNT_ITEMS = [
   { to: "/about", labelKey: "workbench.nav.about", icon: InfoIcon }
 ] as const
 
-/** 位移不超过这个值仍算点击：交给 SidebarRail 原生切换，不进入拖拽。 */
 const RESIZE_CLICK_THRESHOLD_PX = 3
 
 function isActivePath(pathname: string, to: string) {
@@ -121,16 +119,6 @@ function Navigation({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-/**
- * 登录后的应用壳：侧边栏 + 顶栏 + 内容区（技术方案 §3C 的三件套骨架）。
- *
- * 侧栏只留工作台；个人资料 / 系统管理 / 设置 / 关于在顶栏头像菜单里
- * （系统管理按角色隐藏，接口层另有 403）。移动端把同一份侧栏装进 Sheet。
- *
- * 桌面侧栏用 shadcn/ui Sidebar 的 `collapsible="icon"` 收起成图标栏，
- * 收起 / 图标 / 悬停提示都是官方能力；只有右缘拖动是这里补的：宽度与开合
- * 状态由本组件受控，并只写 localStorage（键见 lib/sidebar.ts）。
- */
 export function AppShell() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -167,9 +155,7 @@ export function AppShell() {
     writeSidebarOpen(open)
   }
 
-  /** 右缘按下只记录起点；位移超过阈值才真正开始拖。 */
   const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    // 收起态宽度固定走官方 3rem，非主键不参与拖拽。
     if (!sidebarOpen || event.button !== 0) return
     dragRef.current = {
       startX: event.clientX,
@@ -177,7 +163,7 @@ export function AppShell() {
       width: sidebarWidth,
       moved: false
     }
-    // 上一次拖拽若没等来 click，不能让它吃掉这一次正常点击。
+
     suppressRailClickRef.current = false
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -193,7 +179,6 @@ export function AppShell() {
     setSidebarWidth(drag.width)
   }
 
-  /** 拖动中只改内存宽度，松手才落盘；没收住位移则完全不碰开合状态。 */
   const endResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current
     if (!drag) return

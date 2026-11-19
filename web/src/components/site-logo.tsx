@@ -4,13 +4,6 @@ type SiteLogoProps = {
   className?: string
 }
 
-/**
- * 站点标（菱形环）：外菱形挖掉内菱形，靠 evenodd 成环。
- *
- * 单色几何标，颜色一律继承 `currentColor`：亮/暗主题与侧栏前景色共用一份，
- * 不做两套资源。纯装饰——可访问名交给同一行里的站名，因此 aria-hidden 后
- * 不进入链接名。默认 `size-5`，尺寸需要时由调用方经 `cn` 覆盖。
- */
 export function SiteLogo({ className }: SiteLogoProps) {
   return (
     <svg

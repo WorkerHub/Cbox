@@ -5,12 +5,6 @@ import { PasswordChangeForm } from "@/components/password-change-form"
 import { Button } from "@/components/ui/button"
 import { useAuthStore } from "@/stores/auth"
 
-/**
- * 首登强制改密页：管理员建号的一次性密码登录后整屏引导改密。
- *
- * 页面守卫 `RequirePasswordChanged` 负责把带标记的访问送到这里；本页只做
- * 表单与出口。没有标记的账号直接访问本页时回工作台，避免留下无用入口。
- */
 export function ChangePasswordPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()

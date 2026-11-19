@@ -119,7 +119,6 @@ describe("UploadDialog", () => {
     const submitBtn = screen.getByRole("button", { name: "开始上传" })
     await user.click(submitBtn)
 
-    // 上传中展示字节级进度与取消按钮
     expect(await screen.findByText(/100 B \/ 1000 B/)).toBeInTheDocument()
 
     const cancelBtn = screen.getByRole("button", { name: "取消" })
@@ -177,7 +176,6 @@ describe("UploadDialog", () => {
     const submitBtn = screen.getByRole("button", { name: "开始上传" })
     await user.click(submitBtn)
 
-    // 进入完成态：展示完整链接（origin + /s/ + token）与复制按钮，不直接关闭
     expect(
       await screen.findByDisplayValue("http://localhost:3000/s/AbCd1234")
     ).toBeInTheDocument()
@@ -185,7 +183,6 @@ describe("UploadDialog", () => {
     expect(handleOpenChange).not.toHaveBeenCalledWith(false)
     expect(handleSuccess).not.toHaveBeenCalled()
 
-    // 点「完成」关闭并刷新列表
     await user.click(screen.getByRole("button", { name: "完成" }))
     await waitFor(() => {
       expect(handleOpenChange).toHaveBeenCalledWith(false)

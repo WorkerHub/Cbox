@@ -267,7 +267,6 @@
       "sha256": "File SHA-256",
       "copySha256": "Copy SHA-256",
       "existingShares": "Existing shares",
-      "suffix": "Token suffix {{suffix}}",
       "downloads": "{{count}} downloads",
       "noDownloads": "0 downloads",
       "revoked": "Revoked",

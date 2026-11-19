@@ -2,15 +2,6 @@ import { readFileSync, readdirSync, statSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 
-/**
- * 界面文案守卫（规格 §6.5）：组件源码里不许出现写死的中文文案，
- * 全部走 locales 的 i18n key。注释里的中文不算（本仓注释就是中文）。
- *
- * 只扫 `web/src` 下的 .ts/.tsx/.json，排除 locales 与测试文件；TS 源码
- * 扫描前先去掉注释（字符串保留，中文字面量仍会被抓到），JSON 原样扫描——
- * 以后新增的数据 JSON 里也不许藏界面里直接展示的中文。
- */
-
 const ROOT = path.resolve(process.cwd(), "src")
 const CJK = /[\u4e00-\u9fff]/
 

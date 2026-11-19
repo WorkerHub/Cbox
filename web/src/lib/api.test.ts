@@ -4,12 +4,6 @@ import type { FileItem } from "@/lib/api-types"
 import { useAuthStore } from "@/stores/auth"
 import { me } from "@/test/fixtures"
 
-/**
- * 会话失效的兜底（规格 §6.1「私有接口未登录 401」）：私有接口 401 必须
- * 清掉本地用户态，让 RequireAuth 把人送回登录页；登录等公开鉴权端点
- * 自己的 401 是业务结果，不能顺手把已有会话清掉。
- */
-
 function respond(status: number, body: unknown) {
   return {
     ok: status >= 200 && status < 300,
@@ -59,7 +53,6 @@ describe("401 处理", () => {
 })
 
 describe("用户管理操作列端点", () => {
-  /** 五个端点已在后端冻结：路径、方法与 role 请求体由这里锁住，防止前端漂移。 */
   function recordFetch() {
     const calls: Array<{ url: string; method: string; body: unknown }> = []
     vi.stubGlobal(
@@ -305,7 +298,6 @@ describe("filesApi 直传与分片上传", () => {
   })
 
   it("upload 分片模式 (>100 MiB) 按分片批量签 URL、PUT 并完成", async () => {
-    // 构造一个 25 字节的文件，模拟分片大小 10 字节（分 3 片：10, 10, 5）
     const content = "0123456789012345678901234"
     const file = new File([content], "big.bin", {
       type: "application/octet-stream"
@@ -442,7 +434,7 @@ describe("filesApi 直传与分片上传", () => {
     )
 
     const uploadPromise = filesApi.upload(file, { signal: controller.signal })
-    // 触发取消
+
     controller.abort()
 
     await expect(uploadPromise).rejects.toThrow()

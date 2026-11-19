@@ -58,13 +58,6 @@ const STATUS_VARIANT = {
   disabled: "outline"
 } as const
 
-/**
- * 系统管理 · 全部用户（规格 §5.6.2 用户管理操作列）。
- *
- * 操作列的「⋯」菜单接后端的五个管理员端点；待批准行另保留行内批准/拒绝。
- * 一次性密码只进组件 state，弹窗关闭即清——不写本地存储、不进提示语与 URL。
- * 对自己隐藏停用/删除，服务端的 SELF_ACTION_FORBIDDEN 仍是最终边界。
- */
 export function UsersSection({
   globalLimits
 }: {
@@ -122,7 +115,6 @@ export function UsersSection({
     setBusyId(user.id)
     setError("")
     try {
-      // 成功后不再刷新列表：密码只回这一次，重置自己的会话会随之失效。
       setResetResult(await adminApi.resetUserPassword(user.id))
     } catch (actionError) {
       setError(describeApiError(t, actionError))

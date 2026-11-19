@@ -7,13 +7,8 @@ export interface CalculateFileSha256Options {
   onProgress?: (processedBytes: number, totalBytes: number) => void
 }
 
-const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024 // 2 MiB 滚动分片
+const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024
 
-/**
- * 上传前用增量分片计算文件 SHA-256 哈希（规格 §5.2、§6）。
- * 文件读取一律通过 Blob.slice 分片滚动读取，不得整文件读入内存。
- * 遇到异常或被中断时捕获并返回 null，留空随上传提交，绝不阻塞用户上传。
- */
 export async function calculateFileSha256(
   file: File | Blob,
   options?: CalculateFileSha256Options

@@ -41,10 +41,6 @@ interface PendingAction {
   execute: (password: string) => Promise<void>
 }
 
-/**
- * 设置 · 安全：改密码、两步验证（TOTP + 邮箱验证码）、Passkey 管理。
- * 敏感动作（关闭验证、添加/删除 Passkey）统一走密码确认弹窗，页面不常驻密码框。
- */
 export function SecuritySection() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.user)

@@ -3,13 +3,6 @@ import { cleanup } from "@testing-library/react"
 import { afterEach, beforeEach, vi } from "vitest"
 import { i18n } from "@/i18n"
 
-/**
- * 测试环境的公共卫生：jsdom 的 matchMedia、语言与 localStorage。
- *
- * 注意：这里不在模块顶层 import 任何 store —— store 会在 import 时抓住当时的
- * api 模块，早于测试文件的 vi.mock 就会拿到真实客户端。改为每个用例动态 import，
- * 保证页面测试注入的 mock 生效。
- */
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
@@ -24,7 +17,6 @@ Object.defineProperty(window, "matchMedia", {
   }))
 })
 
-// jsdom 未实现 Pointer Capture API，Radix Select 等组件会调用它。
 if (typeof Element !== "undefined") {
   if (!Element.prototype.hasPointerCapture) {
     Element.prototype.hasPointerCapture = vi.fn(() => false)
@@ -35,13 +27,12 @@ if (typeof Element !== "undefined") {
   if (!Element.prototype.releasePointerCapture) {
     Element.prototype.releasePointerCapture = vi.fn()
   }
-  // jsdom 未实现 scrollIntoView，Radix Select 打开下拉时会调用。
+
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = vi.fn()
   }
 }
 
-// jsdom 未实现 ResizeObserver，Radix Popper / Tooltip 测量锚点尺寸时会 new 它。
 if (typeof globalThis.ResizeObserver === "undefined") {
   globalThis.ResizeObserver = class {
     observe() {}

@@ -1,10 +1,6 @@
 import type { ReactNode } from "react"
 import { Label } from "@/components/ui/label"
 
-/**
- * 表单一行：Label + 控件 + 错误文案。控件自身负责 aria-invalid / aria-describedby
- * 所需的 id；这里只统一间距与错误样式，避免每个页面各写一套。
- */
 export function Field({
   id,
   label,
