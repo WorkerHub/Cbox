@@ -1,9 +1,3 @@
-/**
- * 限额常数与换算工具（规格 §4）
- * 1 MB = 1048576 字节，上限 1048576 MB（1 TiB）。
- * 前后端口径完全一致。
- */
-
 export const BYTES_PER_MB = 1048576
 export const MAX_LIMIT_MB = 1048576
 
@@ -15,9 +9,6 @@ export function bytesToMB(bytes: number): number {
   return Math.floor(bytes / BYTES_PER_MB)
 }
 
-/**
- * 校验 MB 输入：必须为 1 ~ 1048576 之间的正整数。
- */
 export function validateLimitMB(value: unknown): {
   valid: boolean
   num?: number

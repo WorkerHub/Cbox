@@ -21,12 +21,6 @@ import { useAuthStore } from "@/stores/auth"
 
 const PROVIDERS: EmailProvider[] = ["none", "smtp", "resend"]
 
-/**
- * 系统管理 · 邮件配置（规格 §5.5A）：三态单选 + 两套字段各自脱敏返回。
- *
- * 凭据回显只给「已设置/未设置」布尔值；保存时留空表示不改。
- * 测试邮件的 provider 原始错误放等宽块直出（诊断用，不进 i18n）。
- */
 export function EmailSection(props?: {
   settings?: AdminSettings
   onSaved?: (settings: AdminSettings) => void
@@ -94,7 +88,7 @@ export function EmailSection(props?: {
         }
       })
       onSaved(updated)
-      // 只有保存成功才清空密钥输入：失败时保留管理员已填的内容。
+
       setSmtpPassword("")
       setResendKey("")
       toast.success(t("admin.email.saved"))

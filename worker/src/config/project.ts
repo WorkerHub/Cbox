@@ -29,9 +29,6 @@ export const PROJECT_SLUG = "cbox"
  */
 export const DEFAULT_TABLE_PREFIX: string = defaults.defaultTablePrefix
 
-/** 一句话说明（首页与「关于」页）。 */
-export const PROJECT_TAGLINE = "临时文件中转站：上传、公开直链分享、定时失效。"
-
 /**
  * 源码仓库地址（「关于」页的开源地址来源）。生成新项目时与上面几个令牌一起改。
  * 属身份单点内的常量，因此仍是唯一真源，前端不得再写一份。

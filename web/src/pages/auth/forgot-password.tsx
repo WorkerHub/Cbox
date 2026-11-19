@@ -12,12 +12,6 @@ import { describeApiError, retryAfterSeconds } from "@/lib/api-errors"
 
 type Step = "email" | "code" | "password" | "done"
 
-/**
- * 找回密码（规格 §6.1、§5.6）：输邮箱 → 验证码 → 设新密码。
- *
- * 防枚举：邮箱不存在与存在时界面文案、状态完全一致（都由服务端返回同一形态）。
- * 邮件未配置时登录页不显示入口，这里仍会给可翻译的失败提示。
- */
 export function ForgotPasswordPage() {
   const { t } = useTranslation()
   const [step, setStep] = useState<Step>("email")

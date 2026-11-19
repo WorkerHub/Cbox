@@ -356,7 +356,6 @@ describe("设置页", () => {
       const disableBtn = within(totpRow).getByRole("button", { name: "关闭" })
       expect(disableBtn).toHaveAttribute("data-variant", "destructive")
 
-      // 1. 点动作出弹窗
       await user.click(disableBtn)
       const dialog = screen.getByRole("dialog")
       expect(dialog).toBeInTheDocument()
@@ -364,7 +363,6 @@ describe("设置页", () => {
       const passwordInput = within(dialog).getByLabelText("当前密码")
       const confirmBtn = within(dialog).getByRole("button", { name: "确定" })
 
-      // 2. 错密码报错留在弹窗内
       await user.type(passwordInput, "wrong-password")
       await user.click(confirmBtn)
       expect(authApi.totpDisable).toHaveBeenCalledWith("wrong-password")
@@ -373,7 +371,6 @@ describe("设置页", () => {
       )
       expect(dialog).toBeInTheDocument()
 
-      // 3. 对密码动作完成并关弹窗
       await user.clear(passwordInput)
       await user.type(passwordInput, "correct-password")
       await user.click(confirmBtn)
@@ -583,28 +580,24 @@ describe("设置页", () => {
 
   describe("Tab 独立路由与未保存拦截", () => {
     it("支持两 tab URL 直达、裸路径重定向与未知子路径重定向", async () => {
-      // 1. 直达 /settings/security
       const { unmount: unmount1 } = renderSettings("/settings/security")
       expect(
         await screen.findByRole("heading", { name: "两步验证" })
       ).toBeInTheDocument()
       unmount1()
 
-      // 2. 直达 /settings/preferences
       const { unmount: unmount2 } = renderSettings("/settings/preferences")
       expect(
         await screen.findByRole("combobox", { name: /界面语言|language/i })
       ).toBeInTheDocument()
       unmount2()
 
-      // 3. 裸路径 /settings 自动重定向至首 tab /settings/security
       const { unmount: unmount3 } = renderSettings("/settings")
       expect(
         await screen.findByRole("heading", { name: "两步验证" })
       ).toBeInTheDocument()
       unmount3()
 
-      // 4. 未知子路径 /settings/invalid 自动重定向至首 tab /settings/security
       renderSettings("/settings/invalid")
       expect(
         await screen.findByRole("heading", { name: "两步验证" })
@@ -615,41 +608,35 @@ describe("设置页", () => {
       const user = userEvent.setup()
       renderSettings("/settings/preferences")
 
-      // 修改语言（此时 isDirty 变 true）
       await user.click(
         await screen.findByRole("combobox", { name: /界面语言|language/i })
       )
       await user.click(await screen.findByRole("option", { name: "English" }))
 
-      // 尝试切换到「安全」Tab
       await user.click(screen.getByRole("tab", { name: /安全|security/i }))
 
-      // 弹出未保存修改对话框
       const dialog = await screen.findByRole("dialog")
       expect(dialog).toHaveTextContent("未保存的修改")
       expect(dialog).toHaveTextContent(
         "当前有未保存的修改，离开将丢失内容，是否继续？"
       )
 
-      // 点击「留在本页」
       await user.click(within(dialog).getByRole("button", { name: "留在本页" }))
       await waitFor(() => {
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
       })
-      // 仍在偏好页，保存按钮依然处于 dirty 可用态
+
       expect(screen.getByRole("button", { name: /保存|save/i })).toBeEnabled()
       expect(
         screen.queryByRole("heading", { name: "两步验证" })
       ).not.toBeInTheDocument()
 
-      // 再次尝试切换并点击「放弃修改」
       await user.click(screen.getByRole("tab", { name: /安全|security/i }))
       const discardDialog = await screen.findByRole("dialog")
       await user.click(
         within(discardDialog).getByRole("button", { name: "放弃修改" })
       )
 
-      // 成功切到「安全」
       expect(
         await screen.findByRole("heading", { name: "两步验证" })
       ).toBeInTheDocument()
@@ -662,28 +649,23 @@ describe("设置页", () => {
       const newPasswordInput = await screen.findByLabelText("新密码")
       await user.type(newPasswordInput, "draft-new-pass")
 
-      // 尝试切换到「偏好」Tab
       await user.click(screen.getByRole("tab", { name: /偏好|preferences/i }))
 
-      // 弹出未保存拦截弹窗
       const dialog = await screen.findByRole("dialog")
       expect(dialog).toHaveTextContent("未保存的修改")
 
-      // 点击「留在本页」
       await user.click(within(dialog).getByRole("button", { name: "留在本页" }))
       expect(screen.getByLabelText("新密码")).toHaveValue("draft-new-pass")
       expect(
         screen.queryByRole("combobox", { name: /界面语言|language/i })
       ).not.toBeInTheDocument()
 
-      // 再次尝试切换并选择「放弃修改」
       await user.click(screen.getByRole("tab", { name: /偏好|preferences/i }))
       const discardDialog = await screen.findByRole("dialog")
       await user.click(
         within(discardDialog).getByRole("button", { name: "放弃修改" })
       )
 
-      // 成功切换至偏好页
       expect(
         await screen.findByRole("combobox", { name: /界面语言|language/i })
       ).toBeInTheDocument()

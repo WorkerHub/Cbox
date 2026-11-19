@@ -52,7 +52,7 @@ const buildMockFolderData = (): FolderListResponse => ({
       id: "file-1",
       folderId: null,
       name: "app.jar",
-      sizeBytes: 1048576, // 1 MB
+      sizeBytes: 1048576,
       contentType: "application/java-archive",
       sha256:
         "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
@@ -63,7 +63,7 @@ const buildMockFolderData = (): FolderListResponse => ({
   ],
   usage: {
     usedBytes: 1048576,
-    quotaBytes: 104857600, // 100 MB
+    quotaBytes: 104857600,
     singleMaxBytes: 104857600
   }
 })
@@ -146,7 +146,7 @@ describe("WorkbenchPage", () => {
     const mockShare: ShareItem = {
       id: "s1",
       fileId: "file-1",
-      tokenSuffix: "abcd",
+      token: "abcd1234",
       expiresAt: futureIso(48),
       downloadCount: 3,
       lastDownloadedAt: pastIso(1),
@@ -169,32 +169,66 @@ describe("WorkbenchPage", () => {
     )
 
     await screen.findByText("app.jar")
-    // 打开文件行操作菜单
+
     await user.click(screen.getByTestId("file-menu-file-1"))
 
-    // 点击分享
     const shareMenuItem = await screen.findByText("分享")
     await user.click(shareMenuItem)
 
-    // 分享弹窗打开，应包含文件 SHA-256
     expect(await screen.findByText("文件 SHA-256")).toBeInTheDocument()
     expect(
       screen.getByText(
         /aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899/
       )
     ).toBeInTheDocument()
-    expect(screen.getByText("尾号 abcd")).toBeInTheDocument()
+    expect(
+      screen.getByDisplayValue("http://localhost:3000/s/abcd1234")
+    ).toBeInTheDocument()
     expect(screen.getByText("3 次下载")).toBeInTheDocument()
 
-    // 点击生成分享直链
     await user.click(screen.getByRole("button", { name: "生成分享直链" }))
 
     await waitFor(() => {
-      expect(sharesApi.create).toHaveBeenCalledWith("file-1", "24h")
+      expect(sharesApi.create).toHaveBeenCalledWith("file-1", "file")
     })
     expect(
       await screen.findByDisplayValue("https://example.com/s/secret-token-1234")
     ).toBeInTheDocument()
+  })
+
+  it("存量旧分享（token 为 null）不展示链接行与复制按钮", async () => {
+    const user = userEvent.setup()
+    const legacyShare: ShareItem = {
+      id: "s-legacy",
+      fileId: "file-1",
+      token: null,
+      expiresAt: futureIso(48),
+      downloadCount: 5,
+      lastDownloadedAt: pastIso(1),
+      createdAt: pastIso(2),
+      expired: false
+    }
+
+    vi.mocked(sharesApi.list).mockResolvedValue({ items: [legacyShare] })
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+    await user.click(await screen.findByText("分享"))
+
+    expect(await screen.findByText("5 次下载")).toBeInTheDocument()
+    expect(
+      screen.queryByDisplayValue(/localhost:3000\/s\//)
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "复制链接" })
+    ).not.toBeInTheDocument()
+    expect(screen.getByTitle("撤销")).toBeInTheDocument()
   })
 
   it("修改文件过期时间弹窗可提交", async () => {

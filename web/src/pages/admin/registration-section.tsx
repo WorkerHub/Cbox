@@ -11,12 +11,6 @@ import type {
   RegistrationSettings
 } from "@/lib/api-types"
 
-/**
- * 系统管理 · 注册与审核（规格 §5.6、§6.1）。
- *
- * 「注册需邮箱验证」在邮件未配置时不可开启（前端置灰，后端同样拒绝）；
- * 若开关早已打开而邮件被清空，这里明确提示「暂不生效」，不把新用户锁死。
- */
 export function RegistrationSection(props?: {
   settings?: AdminSettings
   onSaved?: (settings: AdminSettings) => void

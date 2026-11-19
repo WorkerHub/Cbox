@@ -411,7 +411,28 @@ fileRoutes.post("/uploads/:id/complete", async (c) => {
     )
   }
 
-  return c.json(toFileView(file), 200)
+  const fileView = toFileView(file)
+
+  // 自动创建分享（跟随文件有效期，明文令牌仅此一次；失败不阻塞上传成功）
+  try {
+    const autoShare = await createShareRecord(
+      c.env.DB,
+      prefix,
+      userId,
+      fileId,
+      "file"
+    )
+    if (autoShare) {
+      fileView.share = {
+        token: autoShare.token,
+        expiresAt: autoShare.expiresAt
+      }
+    }
+  } catch (err) {
+    console.error("Auto share creation on complete failed:", err)
+  }
+
+  return c.json(fileView, 200)
 })
 
 /**
@@ -552,10 +573,14 @@ fileRoutes.post("/:id/shares", async (c) => {
   const fileId = c.req.param("id")?.trim()
 
   const body = (await readJsonBody<{ expiresIn?: unknown }>(c)) ?? {}
-  let preset = "24h"
+  let preset = "file"
   if (typeof body.expiresIn === "string" && body.expiresIn.trim() !== "") {
     const trimmed = body.expiresIn.trim()
-    if (trimmed !== "never" && !isValidExpiresInPreset(trimmed)) {
+    if (
+      trimmed !== "file" &&
+      trimmed !== "never" &&
+      !isValidExpiresInPreset(trimmed)
+    ) {
       return apiError(c, 400, "INVALID_EXPIRES_IN", "Invalid expiration preset")
     }
     preset = trimmed

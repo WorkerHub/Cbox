@@ -40,7 +40,6 @@ export function WorkbenchPage() {
     singleMaxBytes: 0
   })
 
-  // 弹窗状态
   const [createFolderOpen, setCreateFolderOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [shareFile, setShareFile] = useState<FileItem | null>(null)
@@ -80,7 +79,6 @@ export function WorkbenchPage() {
       className="flex h-full flex-col gap-4 p-4 sm:p-6"
       data-testid="workbench-page"
     >
-      {/* 顶部操作区与面包屑 */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <BreadcrumbNav
           breadcrumbs={breadcrumbs}
@@ -104,8 +102,6 @@ export function WorkbenchPage() {
           </Button>
         </div>
       </div>
-
-      {/* 主体列表 */}
       <div className="flex-1">
         {loading ? (
           <div className="flex flex-col gap-2 p-4">
@@ -141,15 +137,11 @@ export function WorkbenchPage() {
           />
         )}
       </div>
-
-      {/* 底部用量条 */}
       <UsageBar
         usedBytes={usage.usedBytes}
         quotaBytes={usage.quotaBytes}
         singleMaxBytes={usage.singleMaxBytes}
       />
-
-      {/* 弹窗集合 */}
       <CreateFolderDialog
         open={createFolderOpen}
         onOpenChange={setCreateFolderOpen}

@@ -22,12 +22,6 @@ import {
 } from "@/lib/language"
 import { useAuthStore } from "@/stores/auth"
 
-/**
- * 常用时区（IANA 标识，按 UTC 偏移自西向东排序）。
- *
- * 替代原先 `Intl.supportedValuesOf("timeZone")` 拉取的全部时区（约 400 项）；
- * 用户已保存的时区若不在本列表内，仍会由 useMemo 自动补到最前。
- */
 const COMMON_TIME_ZONES: string[] = [
   "Pacific/Honolulu",
   "America/Los_Angeles",
@@ -71,11 +65,6 @@ const COMMON_TIME_ZONES: string[] = [
   "Pacific/Auckland"
 ]
 
-/**
- * 设置 · 偏好：语言与时区。
- *
- * 语言与时区均为先选后存，统一通过「保存」按钮提交（`PUT /api/me`）。
- */
 export function PreferencesSection() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.user)

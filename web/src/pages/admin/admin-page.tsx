@@ -20,7 +20,6 @@ export interface AdminOutletContext {
   onSaved: (settings: AdminSettings) => void
 }
 
-/** 用户管理子路由视图：包含新建用户与用户列表（文件限额透传给用户限额弹窗）。 */
 export function AdminUsersTab() {
   const { settings } = useOutletContext<AdminOutletContext>()
   return (
@@ -31,12 +30,6 @@ export function AdminUsersTab() {
   )
 }
 
-/**
- * 旧 `/admin?tab=<slug>` 链接的兼容重定向：
- * - `maintenance` 映射到 `/admin/database`（历史别名）；
- * - 其余非空 slug 直通 `/admin/<slug>`；
- * - 缺省/空则回落到首 tab `/admin/email`。
- */
 export function AdminIndexRedirect() {
   const [searchParams] = useSearchParams()
   const tab = searchParams.get("tab")
@@ -48,11 +41,6 @@ export function AdminIndexRedirect() {
   return <Navigate to={target} replace />
 }
 
-/**
- * 系统管理页（规格 §6.1，仅管理员）：邮件配置、注册/审核、用户列表、
- * 文件限额、setup 页开关与数据库维护。菜单隐藏只是体验，接口层 403 才是边界。
- * 现已重构为路径段独立子路由，不使用 query 参数或页内状态切换。
- */
 export function AdminPage() {
   const { t } = useTranslation()
   const location = useLocation()

@@ -50,7 +50,6 @@ function renderAt(entries: RouteObject[] = routes, path = "/") {
 }
 
 function accountUser() {
-  // Radix 打开菜单时给 body 加 pointer-events: none，默认检查会拒绝点击。
   return userEvent.setup({ pointerEventsCheck: 0 })
 }
 
@@ -222,7 +221,7 @@ describe("路由与根门", () => {
 
     const brand = screen.getByRole("link", { name: PROJECT_NAME })
     expect(brand.getAttribute("href")).toBe("/workbench")
-    // 站点标是装饰性图形：带在链接里，但不进可访问名（名仍只是站名）。
+
     const mark = brand.querySelector("svg")
     expect(mark).not.toBeNull()
     expect(mark).toHaveAttribute("aria-hidden", "true")
@@ -276,7 +275,7 @@ describe("路由与根门", () => {
 
     expect(sidebar).toHaveAttribute("data-state", "expanded")
     expect(localStorage.getItem(SIDEBAR_OPEN_STORAGE_KEY)).toBe("true")
-    // 收起 / 展开不覆盖用户调好的宽度。
+
     expect(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)).toBe("320")
   })
 
@@ -301,7 +300,6 @@ describe("路由与根门", () => {
     expect(wrapper.style.getPropertyValue("--sidebar-width")).toBe("300px")
     expect(wrapper).toHaveAttribute("data-resizing", "true")
 
-    // 越过上限夹到 360，松手才落盘。
     fireEvent.pointerMove(rail, { pointerId: 1, clientX: 900 })
     expect(wrapper.style.getPropertyValue("--sidebar-width")).toBe("360px")
     expect(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)).toBeNull()
@@ -310,11 +308,9 @@ describe("路由与根门", () => {
     expect(wrapper).not.toHaveAttribute("data-resizing")
     expect(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)).toBe("360")
 
-    // 拖动过：尾随 click 被吞掉，侧栏保持展开。
     fireEvent.click(rail)
     expect(sidebar).toHaveAttribute("data-state", "expanded")
 
-    // 原地点击（位移 ≤ 3px）仍走 SidebarRail 原生切换。
     fireEvent.pointerDown(rail, { pointerId: 2, button: 0, clientX: 500 })
     fireEvent.pointerUp(rail, { pointerId: 2, clientX: 501 })
     fireEvent.click(rail)
@@ -373,7 +369,7 @@ describe("路由与根门", () => {
 
     await user.click(collapse)
     const expand = screen.getByRole("button", { name: "展开侧栏" })
-    // 点击后指针仍停在按钮上，先移开再进入，确保触发新的 pointerenter。
+
     await user.unhover(expand)
     await user.hover(expand)
     expect(await screen.findByRole("tooltip")).toHaveTextContent("展开侧栏")
@@ -386,42 +382,36 @@ describe("路由与根门", () => {
     vi.mocked(meApi.get).mockResolvedValue(me({ role: "admin" }))
     vi.mocked(adminApi.settings).mockResolvedValue(adminSettings())
 
-    // 1. /admin 重定向至 /admin/email
     const { unmount: u1 } = renderAt(routes, "/admin")
     expect(
       await screen.findByRole("heading", { name: "邮件配置" })
     ).toBeInTheDocument()
     u1()
 
-    // 2. /admin/invalid 重定向至 /admin/email
     const { unmount: u2 } = renderAt(routes, "/admin/invalid")
     expect(
       await screen.findByRole("heading", { name: "邮件配置" })
     ).toBeInTheDocument()
     u2()
 
-    // 3. /settings 重定向至 /settings/security
     const { unmount: u3 } = renderAt(routes, "/settings")
     expect(
       await screen.findByRole("heading", { name: "两步验证" })
     ).toBeInTheDocument()
     u3()
 
-    // 4. /settings/invalid 重定向至 /settings/security
     const { unmount: u4 } = renderAt(routes, "/settings/invalid")
     expect(
       await screen.findByRole("heading", { name: "两步验证" })
     ).toBeInTheDocument()
     u4()
 
-    // 5. /admin/database 独立 URL 直达
     const { unmount: u5 } = renderAt(routes, "/admin/database")
     expect(
       await screen.findByRole("heading", { name: "数据库维护" })
     ).toBeInTheDocument()
     u5()
 
-    // 6. /admin/maintenance 重定向至 /admin/database
     const { unmount: u6 } = renderAt(routes, "/admin/maintenance")
     expect(
       await screen.findByRole("heading", { name: "数据库维护" })

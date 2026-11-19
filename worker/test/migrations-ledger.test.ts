@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest"
 import {
   BASELINE_MIGRATION,
   FILES_UPLOADS_MIGRATION,
+  SHARES_TOKEN_MIGRATION,
   getMigrations
 } from "../src/lib/migrations"
 import { splitStatements } from "../src/lib/migrations-runner"
@@ -17,6 +18,7 @@ import {
   migrationsTable,
   sessionsTable,
   settingsTable,
+  sharesTable,
   user2faTable,
   usersTable
 } from "../src/lib/tables"
@@ -37,7 +39,8 @@ describe("迁移定义", () => {
     const migrations = getMigrations(prefix)
     expect(migrations.map((migration) => migration.name)).toEqual([
       BASELINE_MIGRATION,
-      FILES_UPLOADS_MIGRATION
+      FILES_UPLOADS_MIGRATION,
+      SHARES_TOKEN_MIGRATION
     ])
     for (const migration of migrations) {
       const statements = splitStatements(migration.sql)
@@ -95,7 +98,8 @@ describe("账本命名", () => {
     if (again.success) {
       expect(again.migrations).toEqual([
         { name: BASELINE_MIGRATION, status: "skipped" },
-        { name: FILES_UPLOADS_MIGRATION, status: "skipped" }
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" },
+        { name: SHARES_TOKEN_MIGRATION, status: "skipped" }
       ])
     }
   })
@@ -117,7 +121,8 @@ describe("旧账本改名承接", () => {
     if (result.success) {
       expect(result.migrations).toEqual([
         { name: BASELINE_MIGRATION, status: "skipped" },
-        { name: FILES_UPLOADS_MIGRATION, status: "skipped" }
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" },
+        { name: SHARES_TOKEN_MIGRATION, status: "skipped" }
       ])
     }
 
@@ -129,7 +134,11 @@ describe("旧账本改名承接", () => {
       .prepare(`SELECT name FROM ${migrationsTable(prefix)}`)
       .all() as Array<{ name: string }>
     expect(new Set(rows.map((row) => row.name))).toEqual(
-      new Set([BASELINE_MIGRATION, FILES_UPLOADS_MIGRATION])
+      new Set([
+        BASELINE_MIGRATION,
+        FILES_UPLOADS_MIGRATION,
+        SHARES_TOKEN_MIGRATION
+      ])
     )
   })
 
@@ -185,9 +194,10 @@ describe("生产库增量升级与兼容（存量已应用 v1..v6）", () => {
     const ledger = migrationsTable(prefix)
     const users = usersTable(prefix)
     const files = filesTable(prefix)
+    const shares = sharesTable(prefix)
     const now = new Date().toISOString()
 
-    // 模拟生产库状态：账本拥有历史 v1..v6 应用记录（尚未应用 files_uploads_v1）
+    // 模拟生产库状态：账本拥有历史 v1..v6 应用记录（尚未应用 files_uploads_v1 与 shares_token_v1）
     const legacyRecords = [
       "schema_v1",
       "schema_v2",
@@ -213,26 +223,30 @@ describe("生产库增量升级与兼容（存量已应用 v1..v6）", () => {
       )
       .run("prod-admin@example.test", now, now)
 
-    // 模拟存量 files 表如果缺少 status / upload_id 列
+    // 模拟存量 files 表如果缺少 status / upload_id 列，shares 表缺少 token 列
     db.db.exec(`ALTER TABLE ${files} DROP COLUMN status`)
     db.db.exec(`ALTER TABLE ${files} DROP COLUMN upload_id`)
+    db.db.exec(`ALTER TABLE ${shares} DROP COLUMN token`)
     expect(columnNames(db, files)).not.toContain("status")
     expect(columnNames(db, files)).not.toContain("upload_id")
+    expect(columnNames(db, shares)).not.toContain("token")
 
     // 执行 setup / 数据库维护升级
     const result = await runSetup(env)
     expect(result.success).toBe(true)
     if (result.success) {
-      // 基线 schema_v1 被识别为 skipped，增量 files_uploads_v1 成功 applied
+      // 基线 schema_v1 被识别为 skipped，增量 files_uploads_v1 与 shares_token_v1 成功 applied
       expect(result.migrations).toEqual([
         { name: BASELINE_MIGRATION, status: "skipped" },
-        { name: FILES_UPLOADS_MIGRATION, status: "applied" }
+        { name: FILES_UPLOADS_MIGRATION, status: "applied" },
+        { name: SHARES_TOKEN_MIGRATION, status: "applied" }
       ])
     }
 
-    // 校验 files 表成功补全两列
+    // 校验 files 表成功补全两列，shares 表成功补全 token 列
     expect(columnNames(db, files)).toContain("status")
     expect(columnNames(db, files)).toContain("upload_id")
+    expect(columnNames(db, shares)).toContain("token")
 
     // 既有测试账号完整保留
     const userRow = db.db
@@ -247,19 +261,113 @@ describe("生产库增量升级与兼容（存量已应用 v1..v6）", () => {
       status: "active"
     })
 
-    // 再次执行 setup：两项迁移均 skipped（幂等）
+    // 再次执行 setup：三项迁移均 skipped（幂等）
     const secondResult = await runSetup(env)
     expect(secondResult.success).toBe(true)
     if (secondResult.success) {
       expect(secondResult.migrations).toEqual([
         { name: BASELINE_MIGRATION, status: "skipped" },
-        { name: FILES_UPLOADS_MIGRATION, status: "skipped" }
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" },
+        { name: SHARES_TOKEN_MIGRATION, status: "skipped" }
+      ])
+    }
+  })
+
+  it("生产库已有 schema_v1 与 files_uploads_v1 记录：前两项 skipped，增量 shares_token_v1 applied，存量分享数据保留", async () => {
+    const { env, db } = await initializedContext()
+    const prefix = activePrefix(env)
+    const ledger = migrationsTable(prefix)
+    const shares = sharesTable(prefix)
+    const files = filesTable(prefix)
+    const users = usersTable(prefix)
+    const now = new Date().toISOString()
+
+    // 模拟生产库状态：账本已有 schema_v1 与 files_uploads_v1
+    db.db.exec(`DELETE FROM ${ledger}`)
+    for (const name of [BASELINE_MIGRATION, FILES_UPLOADS_MIGRATION]) {
+      db.db
+        .prepare(`INSERT INTO ${ledger} (name, applied_at) VALUES (?, ?)`)
+        .run(name, Math.floor(Date.now() / 1000))
+    }
+
+    // 创建测试用户与文件
+    db.db
+      .prepare(
+        `INSERT INTO ${users}
+          (id, email, password_hash, role, status, email_verified, language,
+           display_name, timezone, created_at, updated_at, must_change_password)
+         VALUES (999, 'user@example.test', 'hash', 'user', 'active', 1, 'zh', 'User', 'Asia/Shanghai', ?, ?, 0)`
+      )
+      .run(now, now)
+    db.db
+      .prepare(
+        `INSERT INTO ${files}
+          (id, user_id, name, size_bytes, content_type, r2_key, status, created_at)
+         VALUES ('file-999', 999, 'test.txt', 10, 'text/plain', 'u999/file-999', 'active', ?)`
+      )
+      .run(now)
+
+    // 模拟存量 shares 表缺少 token 列
+    db.db.exec(`ALTER TABLE ${shares} DROP COLUMN token`)
+    expect(columnNames(db, shares)).not.toContain("token")
+
+    // 插入一条存量分享（只有 token_hash，无 token 列）
+    db.db
+      .prepare(
+        `INSERT INTO ${shares}
+          (id, file_id, user_id, token_hash, download_count, created_at)
+         VALUES ('share-legacy', 'file-999', 999, 'legacy-hash', 5, ?)`
+      )
+      .run(now)
+
+    // 执行 setup 数据库维护升级
+    const result = await runSetup(env)
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.migrations).toEqual([
+        { name: BASELINE_MIGRATION, status: "skipped" },
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" },
+        { name: SHARES_TOKEN_MIGRATION, status: "applied" }
+      ])
+    }
+
+    // 校验 shares 表补全 token 列，且存量记录的 token 为 null
+    expect(columnNames(db, shares)).toContain("token")
+    const legacyRow = db.db
+      .prepare(
+        `SELECT id, token, token_hash, download_count FROM ${shares} WHERE id = 'share-legacy'`
+      )
+      .get<{
+        id: string
+        token: string | null
+        token_hash: string
+        download_count: number
+      }>()
+    expect(legacyRow?.token).toBeNull()
+    expect(legacyRow?.token_hash).toBe("legacy-hash")
+    expect(legacyRow?.download_count).toBe(5)
+
+    // 再次执行 setup：全部 skipped 幂等
+    const secondResult = await runSetup(env)
+    expect(secondResult.success).toBe(true)
+    if (secondResult.success) {
+      expect(secondResult.migrations).toEqual([
+        { name: BASELINE_MIGRATION, status: "skipped" },
+        { name: FILES_UPLOADS_MIGRATION, status: "skipped" },
+        { name: SHARES_TOKEN_MIGRATION, status: "skipped" }
       ])
     }
   })
 })
 
 describe("单一 V1 终态表结构验证（全新安装）", () => {
+  it("shares 表：包含 token 列", async () => {
+    const { env, db } = await initializedContext()
+    const prefix = activePrefix(env)
+    const columns = columnNames(db, sharesTable(prefix))
+    expect(columns).toContain("token")
+  })
+
   it("files 表：包含 status 与 upload_id 列", async () => {
     const { env, db } = await initializedContext()
     const prefix = activePrefix(env)

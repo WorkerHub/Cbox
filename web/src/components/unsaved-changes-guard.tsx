@@ -56,13 +56,6 @@ function DataRouterUnsavedChangesGuard({ isDirty }: { isDirty: boolean }) {
   )
 }
 
-/**
- * 未保存修改阻断守卫：
- * 1. SPA 内部路由切换（Tab 切换、菜单跳转、前进后退）时通过 useBlocker 拦截；
- * 2. 弹出确认对话框提示用户（留在本页 vs 放弃修改）；
- * 3. 浏览器硬刷新 / 关窗时通过 beforeunload 触发原生提示；
- * 4. 在非 DataRouter 环境（如单元测试单体渲染）自动降级，避免 useBlocker 抛错。
- */
 export function UnsavedChangesGuard({ isDirty }: { isDirty: boolean }) {
   const hasDataRouter = Boolean(useContext(UNSAFE_DataRouterContext))
 

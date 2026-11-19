@@ -28,7 +28,7 @@ describe("PWA 安装清单", () => {
       background_color: "#ffffff",
       theme_color: "#ffffff"
     })
-    expect(String(body.description).length).toBeGreaterThan(0)
+    expect(body.description).toBeUndefined()
     expect(body.icons).toEqual([
       { src: "/icons/pwa-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icons/pwa-512.png", sizes: "512x512", type: "image/png" },

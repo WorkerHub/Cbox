@@ -424,13 +424,12 @@ describe("规格 §11 验收标准全量专项测试", () => {
     expect((await request(env, "/api/me/usage")).status).toBe(401)
     expect((await request(env, "/api/admin/settings")).status).toBe(401)
 
-    // /api/public 返回模板冻结 7 字段，无任何文件/分享/限额私有字段
+    // /api/public 返回模板冻结 6 字段，无任何文件/分享/限额私有字段
     const pubRes = await request(env, "/api/public")
     expect(pubRes.status).toBe(200)
     const pubData = (await pubRes.json()) as Record<string, unknown>
     const allowedKeys = [
       "name",
-      "tagline",
       "repositoryUrl",
       "version",
       "appMode",

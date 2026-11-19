@@ -81,7 +81,6 @@ describe("登录两步（技术方案 §5B）", () => {
     expect(otp.getAttribute("name")).not.toMatch(/password/i)
     expect(otp.getAttribute("id")).not.toMatch(/password/i)
 
-    // 换步 = 换节点：旧表单与旧输入框都已卸载，不存在原地复用。
     const totpForm = document.getElementById("totp-step")
     expect(totpForm).not.toBeNull()
     expect(totpForm).not.toBe(passwordForm)
@@ -243,7 +242,7 @@ describe("登录两步（技术方案 §5B）", () => {
     await waitFor(() =>
       expect(authApi.emailTwoFactorSend).toHaveBeenCalledTimes(1)
     )
-    // 502 不触发倒计时：按钮仍是「发送验证码」且未被禁用
+
     const sendBtn = await screen.findByRole("button", { name: "发送验证码" })
     expect(sendBtn).not.toBeDisabled()
     expect(screen.getByRole("alert")).toHaveTextContent("邮件发送失败")
@@ -272,7 +271,7 @@ describe("登录两步（技术方案 §5B）", () => {
     await waitFor(() =>
       expect(authApi.emailTwoFactorSend).toHaveBeenCalledTimes(1)
     )
-    // 429 带 retryAfter=5：按钮进入倒计时并禁用（真实计时器 + 断言文案出现）
+
     expect(
       await screen.findByRole("button", { name: "5 秒后可重发" })
     ).toBeDisabled()
@@ -307,7 +306,7 @@ describe("登录两步（技术方案 §5B）", () => {
         code: "000000"
       })
     )
-    // 退回密码步：密码框重新出现
+
     expect(await screen.findByLabelText("密码")).toBeInTheDocument()
   })
 
