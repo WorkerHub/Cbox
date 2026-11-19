@@ -23,6 +23,10 @@ export interface FileView {
   expiresAt: string | null
   createdAt: string
   expired: boolean
+  share?: {
+    token: string
+    expiresAt: string | null
+  }
 }
 
 export const VALID_EXPIRES_IN_PRESETS = [
