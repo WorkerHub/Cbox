@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { sha256Hex } from "../src/core/auth"
-import {
-  createShareRecord,
-  generateShareToken
-} from "../src/db/queries/shares"
+import { createShareRecord, generateShareToken } from "../src/db/queries/shares"
 import { filesTable, sharesTable } from "../src/lib/tables"
 import {
   activePrefix,
@@ -409,15 +406,11 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
       .bind(tenMinIso, fileShort.id)
       .run()
 
-    const shareShort = await request(
-      env,
-      `/api/files/${fileShort.id}/shares`,
-      {
-        method: "POST",
-        headers: { cookie: user.cookie, "content-type": "application/json" },
-        body: JSON.stringify({ expiresIn: "1h" })
-      }
-    )
+    const shareShort = await request(env, `/api/files/${fileShort.id}/shares`, {
+      method: "POST",
+      headers: { cookie: user.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ expiresIn: "1h" })
+    })
     expect(shareShort.status).toBe(201)
     const bodyShort = (await shareShort.json()) as { expires_at: string }
     expect(bodyShort.expires_at).toBe(tenMinIso)
