@@ -146,13 +146,7 @@ export function SetupPage() {
           {t("setup.title")}
         </span>
       }
-      subtitle={
-        closed
-          ? undefined
-          : initialized
-            ? t("setup.upgradeSubtitle")
-            : t("setup.initSubtitle")
-      }
+      subtitle={initialized ? undefined : t("setup.initSubtitle")}
     >
       <div className="space-y-4">
         {closed ? (
@@ -165,10 +159,10 @@ export function SetupPage() {
           </div>
         ) : null}
 
-        {!closed && !result ? (
+        {!initialized && !result ? (
           <form
-            key={initialized ? "setup-upgrade" : "setup-init"}
-            id={initialized ? "setup-upgrade" : "setup-init"}
+            key="setup-init"
+            id="setup-init"
             className="space-y-4"
             onSubmit={submitSecret}
           >
@@ -187,11 +181,7 @@ export function SetupPage() {
             {message(error)}
 
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy
-                ? t("common.loading")
-                : initialized
-                  ? t("setup.submitUpgrade")
-                  : t("setup.submitInit")}
+              {busy ? t("common.loading") : t("setup.submitInit")}
             </Button>
           </form>
         ) : null}
