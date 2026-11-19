@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS {prefix}shares (
   id                 TEXT PRIMARY KEY,
   file_id            TEXT NOT NULL,
   user_id            INTEGER NOT NULL,
+  token              TEXT,
   token_hash         TEXT NOT NULL UNIQUE,
   expires_at         TEXT,
   download_count     INTEGER NOT NULL DEFAULT 0,

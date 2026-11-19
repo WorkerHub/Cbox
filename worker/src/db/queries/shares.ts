@@ -6,6 +6,7 @@ export interface ShareRow {
   id: string
   file_id: string
   user_id: number
+  token: string | null
   token_hash: string
   expires_at: string | null
   download_count: number
@@ -16,7 +17,7 @@ export interface ShareRow {
 export interface ShareView {
   id: string
   fileId: string
-  tokenSuffix: string
+  token: string | null
   expiresAt: string | null
   downloadCount: number
   lastDownloadedAt: string | null
@@ -59,9 +60,8 @@ export function generateShareToken(length = 8): string {
 
 /**
  * 为文件创建公开分享（规格 §1、§2、§3）：
- * - 令牌：8 位字符 [A-Za-z0-9]（无偏拒绝采样），D1 只存其 SHA-256 哈希；
+ * - 令牌：8 位字符 [A-Za-z0-9]（无偏拒绝采样），D1 存明文与 SHA-256 哈希；
  * - 遇到 token_hash 唯一约束冲突时重新生成并重试，最多 3 次，仍冲突则报错；
- * - 明文令牌只在返回结果中暴露一次；
  * - 失效预设：file / 1h / 24h / 7d / never（默认 file，跟随文件到期时间）；
  * - 其余预设受文件 expires_at 封顶截断。
  */
@@ -112,10 +112,10 @@ export async function createShareRecord(
       await db
         .prepare(
           `INSERT INTO ${sharesTable(prefix)}
-            (id, file_id, user_id, token_hash, expires_at, download_count, created_at)
-           VALUES (?, ?, ?, ?, ?, 0, ?)`
+            (id, file_id, user_id, token, token_hash, expires_at, download_count, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
         )
-        .bind(id, fileId, userId, tokenHash, shareExpiresAt, now)
+        .bind(id, fileId, userId, token, tokenHash, shareExpiresAt, now)
         .run()
 
       return {
@@ -150,7 +150,7 @@ export async function listSharesByFile(
 ): Promise<ShareView[]> {
   const rows = await db
     .prepare(
-      `SELECT id, file_id, token_hash, expires_at, download_count,
+      `SELECT id, file_id, token, token_hash, expires_at, download_count,
               last_downloaded_at, created_at
          FROM ${sharesTable(prefix)}
         WHERE file_id = ? AND user_id = ?
@@ -163,7 +163,7 @@ export async function listSharesByFile(
   return rows.results.map((r) => ({
     id: r.id,
     fileId: r.file_id,
-    tokenSuffix: r.token_hash.slice(-4),
+    token: r.token ?? null,
     expiresAt: r.expires_at,
     downloadCount: r.download_count,
     lastDownloadedAt: r.last_downloaded_at,
