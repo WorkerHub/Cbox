@@ -287,7 +287,6 @@
       "title": "移动文件",
       "rootDir": "根目录",
       "currentFolder": "当前文件夹",
-      "empty": "无其他文件夹",
       "loading": "正在加载文件夹…",
       "submit": "移动"
     },

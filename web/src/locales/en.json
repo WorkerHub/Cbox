@@ -287,7 +287,6 @@
       "title": "Move file",
       "rootDir": "Root folder",
       "currentFolder": "Current folder",
-      "empty": "No other folders",
       "loading": "Loading folders…",
       "submit": "Move"
     },

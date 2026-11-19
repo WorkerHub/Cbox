@@ -66,9 +66,7 @@ export function MoveFileDialog({
     setSelectedFolderId(undefined)
     const visited = new Set<string>()
 
-    async function getChildren(
-      parentId: string | null
-    ): Promise<FolderTreeNode[]> {
+    async function getSubTree(parentId: string): Promise<FolderTreeNode[]> {
       try {
         const res = await foldersApi.list(parentId)
         const validFolders = (res.folders || []).filter(
@@ -82,7 +80,7 @@ export function MoveFileDialog({
             id: f.id,
             name: f.name,
             parentId: f.parentId,
-            children: await getChildren(f.id)
+            children: await getSubTree(f.id)
           }))
         )
       } catch {
@@ -91,7 +89,21 @@ export function MoveFileDialog({
     }
 
     try {
-      const rootFolders = await getChildren(null)
+      const res = await foldersApi.list(null)
+      const validFolders = (res.folders || []).filter(
+        (f) => f.parentId === null && !visited.has(f.id)
+      )
+      for (const f of validFolders) {
+        visited.add(f.id)
+      }
+      const rootFolders = await Promise.all(
+        validFolders.map(async (f) => ({
+          id: f.id,
+          name: f.name,
+          parentId: f.parentId,
+          children: await getSubTree(f.id)
+        }))
+      )
       setFolders(rootFolders)
     } catch (err) {
       setError(describeApiError(t, err))

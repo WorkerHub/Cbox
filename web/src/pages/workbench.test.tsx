@@ -461,6 +461,35 @@ describe("WorkbenchPage", () => {
     })
   })
 
+  it("移动弹窗在根目录文件夹列表拉取失败时呈现错误提示", async () => {
+    const user = userEvent.setup()
+    vi.mocked(foldersApi.list)
+      .mockResolvedValueOnce(mockFolderData)
+      .mockRejectedValueOnce(
+        new ApiError({
+          status: 500,
+          code: "INTERNAL_ERROR",
+          message: "Database error"
+        })
+      )
+
+    render(
+      <MemoryRouter>
+        <WorkbenchPage />
+      </MemoryRouter>
+    )
+
+    await screen.findByText("app.jar")
+    await user.click(screen.getByTestId("file-menu-file-1"))
+    await user.click(await screen.findByText("移动到"))
+
+    expect(await screen.findByText("移动文件")).toBeInTheDocument()
+    const errorEl = await screen.findByTestId("move-error")
+    expect(errorEl).toBeInTheDocument()
+    expect(errorEl.textContent).toBeTruthy()
+    expect(screen.getByRole("button", { name: "移动" })).toBeDisabled()
+  })
+
   it("用量条在 ≥90% 时使用红色警示样式", async () => {
     const highUsageData: FolderListResponse = {
       ...mockFolderData,
