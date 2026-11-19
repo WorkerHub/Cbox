@@ -564,18 +564,19 @@ fileRoutes.patch("/:id", async (c) => {
     } else if (typeof body.folderId === "string") {
       const trimmedFolderId = body.folderId.trim()
       if (!trimmedFolderId) {
-        return apiError(c, 404, "FOLDER_NOT_FOUND", "Folder not found")
+        targetFolderId = null
+      } else {
+        const folder = await findFolderById(
+          c.env.DB,
+          prefix,
+          userId,
+          trimmedFolderId
+        )
+        if (!folder) {
+          return apiError(c, 404, "FOLDER_NOT_FOUND", "Folder not found")
+        }
+        targetFolderId = trimmedFolderId
       }
-      const folder = await findFolderById(
-        c.env.DB,
-        prefix,
-        userId,
-        trimmedFolderId
-      )
-      if (!folder) {
-        return apiError(c, 404, "FOLDER_NOT_FOUND", "Folder not found")
-      }
-      targetFolderId = trimmedFolderId
     } else {
       return apiError(
         c,

@@ -603,7 +603,7 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
         )
       ).toBeDefined()
 
-      // 移回根目录 (folderId: null)
+      // 移回根目录 (folderId: null 或空字符串/纯空白对齐上传口径)
       const moveRootRes = await request(env, `/api/files/${file.id}`, {
         method: "PATCH",
         headers: { cookie: user.cookie, "content-type": "application/json" },
@@ -611,6 +611,20 @@ describe("文件上传、流式下载、改期与删除（规格 §5、§10）",
       })
       expect(moveRootRes.status).toBe(200)
       expect(((await moveRootRes.json()) as any).folderId).toBeNull()
+
+      // 再移入 folderA 后通过 folderId: "" 移回根目录验证空串对齐口径
+      await request(env, `/api/files/${file.id}`, {
+        method: "PATCH",
+        headers: { cookie: user.cookie, "content-type": "application/json" },
+        body: JSON.stringify({ folderId: folderA.id })
+      })
+      const moveEmptyStrRes = await request(env, `/api/files/${file.id}`, {
+        method: "PATCH",
+        headers: { cookie: user.cookie, "content-type": "application/json" },
+        body: JSON.stringify({ folderId: "   " })
+      })
+      expect(moveEmptyStrRes.status).toBe(200)
+      expect(((await moveEmptyStrRes.json()) as any).folderId).toBeNull()
 
       const rootFinalCheck = await request(env, "/api/folders", {
         headers: { cookie: user.cookie }
