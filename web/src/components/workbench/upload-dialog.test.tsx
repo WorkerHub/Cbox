@@ -119,7 +119,6 @@ describe("UploadDialog", () => {
     const submitBtn = screen.getByRole("button", { name: "开始上传" })
     await user.click(submitBtn)
 
-    // 上传中展示字节级进度与取消按钮
     expect(await screen.findByText(/100 B \/ 1000 B/)).toBeInTheDocument()
 
     const cancelBtn = screen.getByRole("button", { name: "取消" })
@@ -129,6 +128,65 @@ describe("UploadDialog", () => {
       expect(caughtSignal?.aborted).toBe(true)
       expect(handleOpenChange).toHaveBeenCalledWith(false)
       expect(handleSuccess).not.toHaveBeenCalled()
+    })
+  })
+
+  it("上传成功且响应带 share 时进入完成态：展示完整链接与复制按钮，点「完成」关闭并刷新", async () => {
+    const user = userEvent.setup()
+    const handleSuccess = vi.fn()
+    const handleOpenChange = vi.fn()
+
+    const mockFileItem: FileItem = {
+      id: "file-123",
+      folderId: null,
+      name: "report.pdf",
+      sizeBytes: 1024,
+      contentType: "application/pdf",
+      sha256: "hash-123",
+      expiresAt: null,
+      createdAt: new Date().toISOString(),
+      expired: false,
+      share: { token: "AbCd1234", expiresAt: null }
+    }
+
+    vi.mocked(filesApi.upload).mockImplementation(
+      async (_file, _options, onProgress) => {
+        onProgress?.({ loaded: 1024, total: 1024, percent: 100 })
+        return mockFileItem
+      }
+    )
+
+    render(
+      <UploadDialog
+        open={true}
+        onOpenChange={handleOpenChange}
+        currentFolderId={null}
+        onSuccess={handleSuccess}
+      />
+    )
+
+    const file = new File(["a".repeat(1024)], "report.pdf", {
+      type: "application/pdf"
+    })
+    const fileInput = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement
+    await user.upload(fileInput, file)
+
+    const submitBtn = screen.getByRole("button", { name: "开始上传" })
+    await user.click(submitBtn)
+
+    expect(
+      await screen.findByDisplayValue("http://localhost:3000/s/AbCd1234")
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "复制直链" })).toBeInTheDocument()
+    expect(handleOpenChange).not.toHaveBeenCalledWith(false)
+    expect(handleSuccess).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole("button", { name: "完成" }))
+    await waitFor(() => {
+      expect(handleOpenChange).toHaveBeenCalledWith(false)
+      expect(handleSuccess).toHaveBeenCalled()
     })
   })
 })

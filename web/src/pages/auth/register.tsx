@@ -17,11 +17,6 @@ type Step =
   | { kind: "verify"; email: string; result: RegisterResult }
   | { kind: "done"; email: string; pending: boolean }
 
-/**
- * 注册页（规格 §5.6、§6.1）：注册成功按服务端返回的两个开关决定后续——
- * 需要邮箱验证时在同一页换成验证码步；需要审核时显示待批准态。
- * 注册请求带当前界面语言，落库后账号的邮件按该语言发送（§6.5）。
- */
 export function RegisterPage() {
   const { t } = useTranslation()
   const info = useSiteStore((state) => state.info)

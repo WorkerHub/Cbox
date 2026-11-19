@@ -6,6 +6,7 @@ export interface ShareRow {
   id: string
   file_id: string
   user_id: number
+  token: string | null
   token_hash: string
   expires_at: string | null
   download_count: number
@@ -16,7 +17,7 @@ export interface ShareRow {
 export interface ShareView {
   id: string
   fileId: string
-  tokenSuffix: string
+  token: string | null
   expiresAt: string | null
   downloadCount: number
   lastDownloadedAt: string | null
@@ -31,26 +32,45 @@ export interface CreateShareResult {
   expiresAt: string | null
 }
 
-/** 生成 32 字节高熵随机 URL-safe 字符串（64 字符十六进制）。 */
-export function generateShareToken(): string {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+const SHARE_TOKEN_CHARS =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+/**
+ * 生成 8 位无偏高熵随机字符串（字符集 [A-Za-z0-9]，约 48 位熵）。
+ * 使用 crypto.getRandomValues + 拒绝采样，拒绝 byte >= 248（62 * 4），避免简单取模偏差。
+ */
+export function generateShareToken(length = 8): string {
+  const maxValidByte = 248 // 62 * 4 = 248 (0..247 有效)
+  let token = ""
+
+  while (token.length < length) {
+    const needed = length - token.length
+    const buffer = new Uint8Array(needed + 8)
+    crypto.getRandomValues(buffer)
+    for (let i = 0; i < buffer.length && token.length < length; i++) {
+      const byte = buffer[i]
+      if (byte < maxValidByte) {
+        token += SHARE_TOKEN_CHARS[byte % 62]
+      }
+    }
+  }
+
+  return token
 }
 
 /**
- * 为文件创建公开分享（规格 §6）：
- * - 令牌：高熵随机串（32 字节随机），D1 只存其 SHA-256 哈希；
- * - 明文令牌只在返回结果中暴露一次；
- * - 失效预设：1h / 24h / 7d / never（默认 24h）；
- * - 受文件 expires_at 封顶截断。
+ * 为文件创建公开分享（规格 §1、§2、§3）：
+ * - 令牌：8 位字符 [A-Za-z0-9]（无偏拒绝采样），D1 存明文与 SHA-256 哈希；
+ * - 遇到 token_hash 唯一约束冲突时重新生成并重试，最多 3 次，仍冲突则报错；
+ * - 失效预设：file / 1h / 24h / 7d / never（默认 file，跟随文件到期时间）；
+ * - 其余预设受文件 expires_at 封顶截断。
  */
 export async function createShareRecord(
   db: D1Database,
   prefix: string,
   userId: number,
   fileId: string,
-  preset: string = "24h"
+  preset: string = "file"
 ): Promise<CreateShareResult | null> {
   // 1. 查询文件
   const file = await db
@@ -66,34 +86,60 @@ export async function createShareRecord(
   if (isFileExpired(file.expires_at)) return null
 
   // 2. 计算分享失效时间，受文件 expires_at 封顶
-  let shareExpiresAt = calculateExpiresAt(preset)
-  if (file.expires_at !== null) {
-    if (shareExpiresAt === null || shareExpiresAt > file.expires_at) {
-      shareExpiresAt = file.expires_at
+  let shareExpiresAt: string | null
+  if (preset === "file") {
+    shareExpiresAt = file.expires_at
+  } else {
+    shareExpiresAt = calculateExpiresAt(preset)
+    if (file.expires_at !== null) {
+      if (shareExpiresAt === null || shareExpiresAt > file.expires_at) {
+        shareExpiresAt = file.expires_at
+      }
     }
   }
 
-  // 3. 生成令牌与哈希
-  const token = generateShareToken()
-  const tokenHash = await sha256Hex(token)
-  const id = crypto.randomUUID()
-  const now = new Date().toISOString()
+  // 3. 生成令牌与哈希（唯一冲突重试最多 3 次）
+  const MAX_RETRIES = 3
+  let lastError: unknown = null
 
-  await db
-    .prepare(
-      `INSERT INTO ${sharesTable(prefix)}
-        (id, file_id, user_id, token_hash, expires_at, download_count, created_at)
-       VALUES (?, ?, ?, ?, ?, 0, ?)`
-    )
-    .bind(id, fileId, userId, tokenHash, shareExpiresAt, now)
-    .run()
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const token = generateShareToken()
+    const tokenHash = await sha256Hex(token)
+    const id = crypto.randomUUID()
+    const now = new Date().toISOString()
 
-  return {
-    id,
-    token,
-    tokenSuffix: tokenHash.slice(-4),
-    expiresAt: shareExpiresAt
+    try {
+      await db
+        .prepare(
+          `INSERT INTO ${sharesTable(prefix)}
+            (id, file_id, user_id, token, token_hash, expires_at, download_count, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?)`
+        )
+        .bind(id, fileId, userId, token, tokenHash, shareExpiresAt, now)
+        .run()
+
+      return {
+        id,
+        token,
+        tokenSuffix: tokenHash.slice(-4),
+        expiresAt: shareExpiresAt
+      }
+    } catch (err) {
+      lastError = err
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as any).message)
+            : String(err)
+      const isConflict = /unique/i.test(message) || /constraint/i.test(message)
+      if (!isConflict || attempt === MAX_RETRIES) {
+        throw err
+      }
+    }
   }
+
+  throw lastError
 }
 
 export async function listSharesByFile(
@@ -104,11 +150,11 @@ export async function listSharesByFile(
 ): Promise<ShareView[]> {
   const rows = await db
     .prepare(
-      `SELECT id, file_id, token_hash, expires_at, download_count,
+      `SELECT id, file_id, token, token_hash, expires_at, download_count,
               last_downloaded_at, created_at
          FROM ${sharesTable(prefix)}
         WHERE file_id = ? AND user_id = ?
-        ORDER BY created_at DESC`
+        ORDER BY created_at DESC, rowid DESC`
     )
     .bind(fileId, userId)
     .all<ShareRow>()
@@ -117,7 +163,7 @@ export async function listSharesByFile(
   return rows.results.map((r) => ({
     id: r.id,
     fileId: r.file_id,
-    tokenSuffix: r.token_hash.slice(-4),
+    token: r.token ?? null,
     expiresAt: r.expires_at,
     downloadCount: r.download_count,
     lastDownloadedAt: r.last_downloaded_at,

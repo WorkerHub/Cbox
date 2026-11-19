@@ -1,6 +1,6 @@
 /**
  * 规格 §7-8（公开隔离）：
- * - `/api/public` 只有七个公开字段，可缓存；
+ * - `/api/public` 只有六个公开字段，可缓存；
  * - 私有接口未登录一律 401 JSON + `no-store`；
  * - 公开响应里不出现密码哈希、TOTP 密钥、邮件配置等私有数据；
  * - 未命中的 API 是 JSON 404，不落 SPA 回落。
@@ -20,7 +20,6 @@ const PUBLIC_KEYS = [
   "name",
   "registrationEnabled",
   "repositoryUrl",
-  "tagline",
   "version"
 ]
 
@@ -42,7 +41,6 @@ describe("公开面隔离", () => {
       version: TEST_APP_VERSION
     })
     expect(String(body.repositoryUrl)).toContain("github.com")
-    expect(String(body.tagline).length).toBeGreaterThan(0)
 
     for (const forbidden of [
       "password",

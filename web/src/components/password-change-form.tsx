@@ -9,12 +9,6 @@ import { meApi } from "@/lib/api"
 import { describeApiError } from "@/lib/api-errors"
 import { useAuthStore } from "@/stores/auth"
 
-/**
- * 改密表单：设置页与首登强制改密页共用。
- *
- * 成功后后端会清掉 `mustChangePassword`；这里同步清本地标记，免得登录后的
- * 页面守卫继续把用户送回改密页。`onChanged` 只给需要跳转的调用方用。
- */
 export function PasswordChangeForm({
   idPrefix,
   onChanged,

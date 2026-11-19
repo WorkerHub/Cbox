@@ -17,13 +17,6 @@ import type {
   UserRole
 } from "@/lib/api-types"
 
-/**
- * 系统管理 · 新建用户（规格 §6.1；契约见 `lib/api-types` 的 `AdminCreateUserInput`）。
- *
- * 初始密码由后端生成、只在创建响应里返回一次：这里只把它放进组件 state 展示，
- * 关闭结果块、切换二级菜单或刷新页面即丢——不写本地存储、不进提示语与 URL。
- * 角色是二选一，用分段按钮（与设置页语言/主题同款）而不是下拉。
- */
 export function CreateUserSection() {
   const { t } = useTranslation()
   const [email, setEmail] = useState("")
@@ -151,7 +144,6 @@ export function CreateUserSection() {
                 value={role}
                 aria-label={t("admin.users.create.role")}
                 onValueChange={(value) => {
-                  // Radix 再点当前项会回传空串：忽略它，角色恒有值。
                   if (value === "admin" || value === "user") setRole(value)
                 }}
               >

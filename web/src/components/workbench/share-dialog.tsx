@@ -31,45 +31,32 @@ interface ShareDialogProps {
   file: FileItem | null
 }
 
-const ALL_SHARE_PRESETS = ["1h", "24h", "7d", "never"] as const
+const ALL_SHARE_PRESETS = ["file", "1h", "24h", "7d", "never"] as const
 
 export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
   const { t } = useTranslation()
   const [shares, setShares] = useState<ShareItem[]>([])
   const [loadingShares, setLoadingShares] = useState(false)
-  const [expiresIn, setExpiresIn] = useState<string>("24h")
+  const [expiresIn, setExpiresIn] = useState<string>("file")
   const [createdUrl, setCreatedUrl] = useState<string>("")
   const [generating, setGenerating] = useState(false)
-  const [copiedLink, setCopiedLink] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [copiedSha, setCopiedSha] = useState(false)
   const [error, setError] = useState("")
 
   const fileHasExpiration = Boolean(file?.expiresAt)
 
-  // 若文件本身有过期时间，封顶处理：
-  // 1. 不可选择 "never"（永不过期）
-  // 2. 若文件剩余时间小于 24 小时，默认档位调整为 1h
   useEffect(() => {
     if (!file) return
-    if (file.expiresAt) {
-      const remainingMs = new Date(file.expiresAt).getTime() - Date.now()
-      if (remainingMs < 24 * 3600 * 1000) {
-        setExpiresIn("1h")
-      } else {
-        setExpiresIn("24h")
-      }
-    } else {
-      setExpiresIn("24h")
-    }
+    setExpiresIn("file")
   }, [file])
 
-  // 打开弹窗时拉取已有分享
   useEffect(() => {
     if (!open || !file) {
       setShares([])
       setCreatedUrl("")
       setError("")
-      setCopiedLink(false)
+      setCopiedUrl(null)
       setCopiedSha(false)
       return
     }
@@ -99,8 +86,11 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
     try {
       await navigator.clipboard.writeText(text)
       if (type === "link") {
-        setCopiedLink(true)
-        setTimeout(() => setCopiedLink(false), 2000)
+        setCopiedUrl(text)
+        setTimeout(
+          () => setCopiedUrl((curr) => (curr === text ? null : curr)),
+          2000
+        )
       } else {
         setCopiedSha(true)
         setTimeout(() => setCopiedSha(false), 2000)
@@ -118,7 +108,7 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
     try {
       const result = await sharesApi.create(file.id, expiresIn)
       setCreatedUrl(result.url)
-      // 刷新已有分享列表
+
       const updated = await sharesApi.list(file.id)
       setShares(updated.items)
     } catch (err) {
@@ -151,7 +141,6 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
         </DialogHeader>
 
         <div className="flex flex-col gap-4 text-xs">
-          {/* 文件信息与 SHA-256 */}
           <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-muted/20 p-3">
             <div className="flex items-center justify-between font-medium text-foreground">
               <span className="truncate pr-2">{file.name}</span>
@@ -163,8 +152,6 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
                 </Badge>
               )}
             </div>
-
-            {/* SHA-256 复制入口 */}
             <div className="flex items-center justify-between gap-2 pt-1">
               <span className="text-muted-foreground">
                 {t("workbench.shareDialog.sha256")}
@@ -193,8 +180,6 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
               )}
             </div>
           </div>
-
-          {/* 生成新分享 */}
           <div className="flex flex-col gap-2.5">
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center">
               <label className="text-muted-foreground sm:w-20">
@@ -243,7 +228,7 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
                   size="xs"
                   onClick={() => handleCopy(createdUrl, "link")}
                 >
-                  {copiedLink ? (
+                  {copiedUrl === createdUrl ? (
                     <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                   ) : (
                     <CopyIcon className="h-3.5 w-3.5" />
@@ -257,8 +242,6 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
           {error && <p className="text-destructive">{error}</p>}
 
           <Separator />
-
-          {/* 已有分享列表 */}
           <div className="flex flex-col gap-2">
             <div className="font-medium text-foreground">
               {t("workbench.shareDialog.existingShares")}
@@ -274,51 +257,77 @@ export function ShareDialog({ open, onOpenChange, file }: ShareDialogProps) {
               </div>
             ) : (
               <div className="flex flex-col gap-1.5 divide-y divide-border/40">
-                {shares.map((share) => (
-                  <div
-                    key={share.id}
-                    className="flex items-center justify-between pt-1.5 text-xs"
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-medium">
-                          {t("workbench.shareDialog.suffix", {
-                            suffix: share.tokenSuffix
-                          })}
-                        </span>
-                        {share.expired && (
-                          <Badge variant="destructive" className="text-[10px]">
-                            {t("workbench.status.expired")}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <span>
-                          {share.expiresAt
-                            ? formatDateTime(share.expiresAt)
-                            : t("workbench.status.never")}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          {t("workbench.shareDialog.downloads", {
-                            count: share.downloadCount
-                          })}
-                        </span>
+                {shares.map((share) => {
+                  const shareUrl = share.token
+                    ? `${window.location.origin}/s/${share.token}`
+                    : null
+
+                  return (
+                    <div
+                      key={share.id}
+                      className="flex flex-col gap-1.5 pt-2 text-xs"
+                    >
+                      {shareUrl ? (
+                        <div className="flex items-center gap-2 rounded-md border border-border bg-background p-2">
+                          <LinkIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <Input
+                            readOnly
+                            value={shareUrl}
+                            className="h-7 border-0 bg-transparent px-0 font-mono text-xs focus-visible:ring-0"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => handleCopy(shareUrl, "link")}
+                          >
+                            {copiedUrl === shareUrl ? (
+                              <CheckIcon className="h-3.5 w-3.5 text-green-600" />
+                            ) : (
+                              <CopyIcon className="h-3.5 w-3.5" />
+                            )}
+                            {t("workbench.shareDialog.copyLink")}
+                          </Button>
+                        </div>
+                      ) : null}
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          {share.expired && (
+                            <Badge
+                              variant="destructive"
+                              className="text-[10px]"
+                            >
+                              {t("workbench.status.expired")}
+                            </Badge>
+                          )}
+                          <span>
+                            {share.expiresAt
+                              ? formatDateTime(share.expiresAt)
+                              : t("workbench.status.never")}
+                          </span>
+                          <span>•</span>
+                          <span>
+                            {t("workbench.shareDialog.downloads", {
+                              count: share.downloadCount
+                            })}
+                          </span>
+                        </div>
+
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handleRevoke(share.id)}
+                          className="text-destructive hover:bg-destructive/10"
+                          title={t("workbench.actions.revoke")}
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </div>
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleRevoke(share.id)}
-                      className="text-destructive hover:bg-destructive/10"
-                      title={t("workbench.actions.revoke")}
-                    >
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

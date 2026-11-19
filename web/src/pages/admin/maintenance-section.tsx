@@ -7,12 +7,6 @@ import { adminApi } from "@/lib/api"
 import { describeApiError } from "@/lib/api-errors"
 import type { AdminSettings, SetupResult } from "@/lib/api-types"
 
-/**
- * 系统管理 · 数据库维护（规格 §5.3.5、§6.1）。
- *
- * 与初始化页调同一个迁移 runner，回显形状一致；管理员会话即凭证，不再要密钥。
- * 「开放初始化页面」只门控页面，不门控密钥接口。
- */
 export function MaintenanceSection(props?: {
   settings?: AdminSettings
   onSaved?: (settings: AdminSettings) => void

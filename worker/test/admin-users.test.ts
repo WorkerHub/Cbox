@@ -183,7 +183,8 @@ describe("系统管理面", () => {
     expect(body.tablePrefix).toBe(activePrefix(env))
     expect(body.migrations).toEqual([
       { name: "schema_v1", status: "skipped" },
-      { name: "files_uploads_v1", status: "skipped" }
+      { name: "files_uploads_v1", status: "skipped" },
+      { name: "shares_token_v1", status: "skipped" }
     ])
   })
 })

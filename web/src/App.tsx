@@ -37,17 +37,6 @@ import { SecuritySection } from "@/pages/settings/security-section"
 import { SetupPage } from "@/pages/setup"
 import { WorkbenchPage } from "@/pages/workbench"
 
-/**
- * 路由表单独导出：测试用 createMemoryRouter(routes) 拿到同一份定义。
- *
- * - RootGate：首屏拉公开信息/setup/自己，未初始化一律去 /setup；
- * - GuestOnly：公开页（首页/登录/注册/找回密码）；
- * - SetupPage：初始化页自带三形态，不进登录壳；
- * - RequireAuth + /change-password：首登强制改密页，不入应用壳；
- * - RequirePasswordChanged + AppShell：带改密标记的账号先被送回改密页；
- * - RequireAdmin：系统管理再拦一层（接口 403 才是最终边界）。
- * - /settings、/admin：已全面路径化为独立路径段子路由（不用 query 参数）。
- */
 export const routes: RouteObject[] = [
   {
     element: <RootGate />,

@@ -9,7 +9,6 @@ import { meApi } from "@/lib/api"
 import { describeApiError } from "@/lib/api-errors"
 import { useAuthStore } from "@/stores/auth"
 
-/** 个人资料页：默认只读展示昵称，点「编辑」才出现输入框；昵称锁开启时编辑按钮置灰。 */
 export function ProfilePage() {
   const { t } = useTranslation()
   const user = useAuthStore((state) => state.user)

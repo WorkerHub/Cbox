@@ -7,7 +7,6 @@ type UserAvatarProps = {
   className?: string
 }
 
-/** 首字圆头像：尺寸由调用方给（顶栏触发 `size-7`、下拉身份块 `size-9`）。 */
 export function UserAvatar({ user, className }: UserAvatarProps) {
   return (
     <Avatar className={className}>
