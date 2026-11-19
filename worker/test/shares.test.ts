@@ -42,14 +42,15 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
     expect(shareBody.url).toMatch(/^http:\/\/worker\.test\/s\/[A-Za-z0-9]{8}$/)
     expect(shareBody.tokenSuffix.length).toBe(4)
 
-    // 提取令牌，校验库中只存 token_hash，绝无明文令牌
+    // 提取令牌，校验库中同时存 token（明文）与 token_hash（哈希），且 token_hash 符合 SHA-256
     const token = shareBody.url.split("/s/")[1]
     const dbRow = await env.DB.prepare(
-      `SELECT token_hash FROM ${sharesTable(prefix)} WHERE id = ?`
+      `SELECT token, token_hash FROM ${sharesTable(prefix)} WHERE id = ?`
     )
       .bind(shareBody.id)
-      .first<{ token_hash: string }>()
+      .first<{ token: string; token_hash: string }>()
 
+    expect(dbRow?.token).toBe(token)
     expect(dbRow?.token_hash).not.toBe(token)
     expect(dbRow?.token_hash).toMatch(/^[0-9a-f]{64}$/)
   })
@@ -553,5 +554,111 @@ describe("公开分享直链与免登下载（规格 §6、§10）", () => {
     } finally {
       crypto.getRandomValues = originalGetRandomValues
     }
+  })
+
+  it("分享列表：每条返回明文 token（存量旧分享为 null），tokenSuffix 从列表中移除，仅所有者登录态可读", async () => {
+    const { env, db } = await initializedContext()
+    const prefix = activePrefix(env)
+    const userA = await seedSession(db, prefix, {
+      role: "user",
+      email: "usera@example.test"
+    })
+    const userB = await seedSession(db, prefix, {
+      role: "user",
+      email: "userb@example.test"
+    })
+
+    // userA 上传文件
+    const up = await directUpload(env, userA.cookie, {
+      filename: "shared-doc.pdf",
+      content: "pdf-content"
+    })
+    const file = (await up.json()) as { id: string }
+
+    // 1. 创建新分享（带明文 token）
+    const shareRes = await request(env, `/api/files/${file.id}/shares`, {
+      method: "POST",
+      headers: { cookie: userA.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ expiresIn: "24h" })
+    })
+    expect(shareRes.status).toBe(201)
+    const shareBody = (await shareRes.json()) as { id: string; url: string }
+    const newToken = shareBody.url.split("/s/")[1]
+
+    // 2. 手动插入一条存量旧分享（token 为 NULL）
+    const legacyToken = "legacy88"
+    const legacyHash = await sha256Hex(legacyToken)
+    const legacyShareId = crypto.randomUUID()
+    const now = new Date().toISOString()
+    await env.DB.prepare(
+      `INSERT INTO ${sharesTable(prefix)}
+        (id, file_id, user_id, token, token_hash, expires_at, download_count, created_at)
+       VALUES (?, ?, ?, NULL, ?, NULL, 0, ?)`
+    )
+      .bind(legacyShareId, file.id, userA.userId, legacyHash, now)
+      .run()
+
+    // 3. 所有者 userA 获取分享列表
+    const listRes = await request(env, `/api/files/${file.id}/shares`, {
+      headers: { cookie: userA.cookie }
+    })
+    expect(listRes.status).toBe(200)
+    const listBody = (await listRes.json()) as {
+      items: Array<{
+        id: string
+        fileId: string
+        token: string | null
+        tokenSuffix?: string
+        expiresAt: string | null
+        downloadCount: number
+        lastDownloadedAt: string | null
+        createdAt: string
+        expired: boolean
+      }>
+    }
+
+    // directUpload 自动创建 1 条 + POST 手动创建 1 条 + 存量注入 1 条 = 3 条
+    expect(listBody.items.length).toBe(3)
+
+    // 新手动创建分享：返回明文 token，不含 tokenSuffix
+    const newShareItem = listBody.items.find((item) => item.id === shareBody.id)
+    expect(newShareItem).toBeDefined()
+    expect(newShareItem?.token).toBe(newToken)
+    expect(newShareItem).not.toHaveProperty("tokenSuffix")
+
+    // 上传直传自动创建的分享：同样持久化了明文 token，且不含 tokenSuffix
+    const autoShareItem = listBody.items.find(
+      (item) => item.id !== shareBody.id && item.id !== legacyShareId
+    )
+    expect(autoShareItem).toBeDefined()
+    expect(autoShareItem?.token).toMatch(/^[A-Za-z0-9]{8}$/)
+    expect(autoShareItem).not.toHaveProperty("tokenSuffix")
+
+    // 存量旧分享：token 为 null，不含 tokenSuffix
+    const legacyShareItem = listBody.items.find(
+      (item) => item.id === legacyShareId
+    )
+    expect(legacyShareItem).toBeDefined()
+    expect(legacyShareItem?.token).toBeNull()
+    expect(legacyShareItem).not.toHaveProperty("tokenSuffix")
+
+    // 4. 免登下载 /s/:token：新旧两种 token 均能按哈希正常下载
+    const dlNew = await request(env, `/s/${newToken}`)
+    expect(dlNew.status).toBe(200)
+    expect(await dlNew.text()).toBe("pdf-content")
+
+    const dlLegacy = await request(env, `/s/${legacyToken}`)
+    expect(dlLegacy.status).toBe(200)
+    expect(await dlLegacy.text()).toBe("pdf-content")
+
+    // 5. 权限隔离：其他用户 userB 无法读取该文件的分享列表
+    const forbidRes = await request(env, `/api/files/${file.id}/shares`, {
+      headers: { cookie: userB.cookie }
+    })
+    expect(forbidRes.status).toBe(404)
+
+    // 6. 权限隔离：未登录访问分享列表 401
+    const unauthRes = await request(env, `/api/files/${file.id}/shares`)
+    expect(unauthRes.status).toBe(401)
   })
 })

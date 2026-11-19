@@ -53,7 +53,8 @@ describe("setup：初始化与回显", () => {
       tablePrefix: prefix,
       migrations: [
         { name: "schema_v1", status: "applied" },
-        { name: "files_uploads_v1", status: "applied" }
+        { name: "files_uploads_v1", status: "applied" },
+        { name: "shares_token_v1", status: "applied" }
       ]
     })
 
@@ -105,7 +106,8 @@ describe("setup：初始化与回显", () => {
     }
     expect(body.migrations).toEqual([
       { name: "schema_v1", status: "skipped" },
-      { name: "files_uploads_v1", status: "skipped" }
+      { name: "files_uploads_v1", status: "skipped" },
+      { name: "shares_token_v1", status: "skipped" }
     ])
     expect(readSetting(db, prefix, "setup_page_enabled")).toBe("1")
   })
@@ -407,7 +409,8 @@ describe("管理面数据库维护（POST /api/admin/setup）", () => {
       tablePrefix: adminPrefix,
       migrations: [
         { name: "schema_v1", status: "skipped" },
-        { name: "files_uploads_v1", status: "skipped" }
+        { name: "files_uploads_v1", status: "skipped" },
+        { name: "shares_token_v1", status: "skipped" }
       ]
     })
   })

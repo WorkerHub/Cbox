@@ -29,6 +29,8 @@ export interface Migration {
 export const BASELINE_MIGRATION = "schema_v1"
 /** 直传上传增量迁移（为 files 表补充 status 与 upload_id 列）。 */
 export const FILES_UPLOADS_MIGRATION = "files_uploads_v1"
+/** 分享明文令牌增量迁移（为 shares 表补充 token 列）。 */
+export const SHARES_TOKEN_MIGRATION = "shares_token_v1"
 
 export function getMigrations(prefix: string): Migration[] {
   const statements = baselineStatements(prefix)
@@ -72,6 +74,20 @@ export function getMigrations(prefix: string): Migration[] {
           await ctx.db
             .prepare(`ALTER TABLE ${t} ADD COLUMN upload_id TEXT`)
             .run()
+        }
+      }
+    },
+    {
+      name: SHARES_TOKEN_MIGRATION,
+      sql: "",
+      prepare: async (ctx) => {
+        const t = tableName(ctx.prefix, "shares")
+        const cols = await ctx.db
+          .prepare(`PRAGMA table_info(${t})`)
+          .all<{ name: string }>()
+        const has = (n: string) => cols.results.some((c) => c.name === n)
+        if (!has("token")) {
+          await ctx.db.prepare(`ALTER TABLE ${t} ADD COLUMN token TEXT`).run()
         }
       }
     }
