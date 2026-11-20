@@ -22,7 +22,7 @@ import {
 } from "@/pages/admin/admin-page"
 import { EmailSection } from "@/pages/admin/email-section"
 import { FileLimitsSection } from "@/pages/admin/file-limits-section"
-import { MaintenanceSection } from "@/pages/admin/maintenance-section"
+import { OthersSection } from "@/pages/admin/others-section"
 import { RegistrationSection } from "@/pages/admin/registration-section"
 import { useAuthStore } from "@/stores/auth"
 
@@ -63,11 +63,7 @@ const adminRoutes: RouteObject[] = [
       { path: "registration", element: <RegistrationSection /> },
       { path: "users", element: <AdminUsersTab /> },
       { path: "limits", element: <FileLimitsSection /> },
-      { path: "database", element: <MaintenanceSection /> },
-      {
-        path: "maintenance",
-        element: <Navigate to="/admin/database" replace />
-      },
+      { path: "others", element: <OthersSection /> },
       { path: "*", element: <Navigate to="/admin/email" replace /> }
     ]
   }
@@ -302,6 +298,37 @@ describe("系统管理", () => {
 
     expect(adminApi.updateSettings).toHaveBeenCalledWith({
       profileLocks: { displayNameLocked: true }
+    })
+  })
+
+  it("「其他」页签展示生效表前缀，切换「开放初始化页面」开关提交 setupPageEnabled", async () => {
+    vi.mocked(adminApi.settings).mockResolvedValue(
+      adminSettings({
+        setupPageEnabled: false,
+        tablePrefix: "custom_prefix_"
+      })
+    )
+    vi.mocked(adminApi.updateSettings).mockResolvedValue(
+      adminSettings({
+        setupPageEnabled: true,
+        tablePrefix: "custom_prefix_"
+      })
+    )
+
+    const user = userEvent.setup()
+    renderAdmin("/admin/others")
+
+    expect(
+      await screen.findByRole("heading", { name: "其他" })
+    ).toBeInTheDocument()
+    expect(screen.getByText("custom_prefix_")).toBeInTheDocument()
+
+    const setupSwitch = screen.getByRole("switch")
+    expect(setupSwitch).toHaveAttribute("aria-checked", "false")
+
+    await user.click(setupSwitch)
+    expect(adminApi.updateSettings).toHaveBeenCalledWith({
+      setupPageEnabled: true
     })
   })
 
@@ -763,23 +790,43 @@ describe("全局文件限额", () => {
       ).toBeInTheDocument()
       unmountLimits()
 
-      const { unmount: unmount3 } = renderAdmin("/admin/database")
+      // 3. 直达 /admin/others
+      const { unmount: unmount3 } = renderAdmin("/admin/others")
       expect(
-        await screen.findByRole("heading", { name: "数据库维护" })
+        await screen.findByRole("heading", { name: "其他" })
       ).toBeInTheDocument()
       unmount3()
 
+      // 4. 旧路径 /admin/database 与 /admin/maintenance 直接替换不留重定向，回落至首 tab /admin/email
+      const { unmount: unmountDb } = renderAdmin("/admin/database")
+      expect(
+        await screen.findByRole("heading", { name: "邮件配置" })
+      ).toBeInTheDocument()
+      unmountDb()
+
       const { unmount: unmountLegacy } = renderAdmin("/admin/maintenance")
       expect(
-        await screen.findByRole("heading", { name: "数据库维护" })
+        await screen.findByRole("heading", { name: "邮件配置" })
       ).toBeInTheDocument()
       unmountLegacy()
+
+      const { unmount: unmountQueryOthers } = renderAdmin("/admin?tab=others")
+      expect(
+        await screen.findByRole("heading", { name: "其他" })
+      ).toBeInTheDocument()
+      unmountQueryOthers()
+
+      const { unmount: unmountQueryDb } = renderAdmin("/admin?tab=database")
+      expect(
+        await screen.findByRole("heading", { name: "邮件配置" })
+      ).toBeInTheDocument()
+      unmountQueryDb()
 
       const { unmount: unmountQueryMaint } = renderAdmin(
         "/admin?tab=maintenance"
       )
       expect(
-        await screen.findByRole("heading", { name: "数据库维护" })
+        await screen.findByRole("heading", { name: "邮件配置" })
       ).toBeInTheDocument()
       unmountQueryMaint()
 

@@ -33,11 +33,7 @@ export function AdminUsersTab() {
 export function AdminIndexRedirect() {
   const [searchParams] = useSearchParams()
   const tab = searchParams.get("tab")
-  const target = !tab
-    ? "/admin/email"
-    : tab === "maintenance"
-      ? "/admin/database"
-      : `/admin/${tab}`
+  const target = !tab ? "/admin/email" : `/admin/${tab}`
   return <Navigate to={target} replace />
 }
 
@@ -61,8 +57,7 @@ export function AdminPage() {
   }, [load])
 
   const segments = location.pathname.split("/").filter(Boolean)
-  const currentTab =
-    segments[1] === "database" ? "maintenance" : segments[1] || "email"
+  const currentTab = segments[1] || "email"
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -93,10 +88,8 @@ export function AdminPage() {
             <TabsTrigger value="limits" asChild>
               <NavLink to="/admin/limits">{t("admin.tabs.limits")}</NavLink>
             </TabsTrigger>
-            <TabsTrigger value="maintenance" asChild>
-              <NavLink to="/admin/database">
-                {t("admin.tabs.maintenance")}
-              </NavLink>
+            <TabsTrigger value="others" asChild>
+              <NavLink to="/admin/others">{t("admin.tabs.others")}</NavLink>
             </TabsTrigger>
           </TabsList>
 
