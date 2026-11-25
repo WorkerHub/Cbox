@@ -100,9 +100,8 @@ export async function createShareRecord(
 
   // 3. 生成令牌与哈希（唯一冲突重试最多 3 次）
   const MAX_RETRIES = 3
-  let lastError: unknown = null
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     const token = generateShareToken()
     const tokenHash = await sha256Hex(token)
     const id = crypto.randomUUID()
@@ -125,7 +124,6 @@ export async function createShareRecord(
         expiresAt: shareExpiresAt
       }
     } catch (err) {
-      lastError = err
       const message =
         err instanceof Error
           ? err.message
@@ -133,13 +131,11 @@ export async function createShareRecord(
             ? String((err as any).message)
             : String(err)
       const isConflict = /unique/i.test(message) || /constraint/i.test(message)
-      if (!isConflict || attempt === MAX_RETRIES) {
+      if (!isConflict || attempt >= MAX_RETRIES) {
         throw err
       }
     }
   }
-
-  throw lastError
 }
 
 export async function listSharesByFile(
